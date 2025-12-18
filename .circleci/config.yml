@@ -19,7 +19,6 @@ jobs:
   deploy:
     executor: docker-executor
     steps:
-      - setup_remote_docker
       - run:
           name: Install sshpass
           command: |
@@ -28,7 +27,7 @@ jobs:
       - run:
           name: Deploy to DigitalOcean
           command: |
-            sshpass -p "$SERVER_PASSWORD" ssh -o StrictHostKeyChecking=no root@69.197.187.23 <<EOF
+            sshpass -p "$SERVER_PASSWORD" ssh -o StrictHostKeyChecking=no root@69.197.187.23 \<<EOF
               cd Billing-System-API
               git pull origin main
               docker-compose down
