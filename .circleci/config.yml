@@ -25,9 +25,9 @@ jobs:
             sudo apt-get update
             sudo apt-get install -y sshpass
       - run:
-          name: Deploy to DigitalOcean
+          name: Deploy to Server
           command: |
-            sshpass -p "$SERVER_PASSWORD" ssh -o StrictHostKeyChecking=no root@69.197.187.23 \<<EOF
+            sshpass -p "$SERVER_PASSWORD" ssh -o StrictHostKeyChecking=no administrator@69.197.187.23 \<<EOF
               cd Billing-System-API
               git pull origin main
               docker-compose down
