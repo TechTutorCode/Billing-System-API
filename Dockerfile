@@ -18,4 +18,4 @@ ENV PYTHONPATH=/code
 EXPOSE 8071
 
 # Run the app
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8071"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8071"]
