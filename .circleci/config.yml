@@ -30,22 +30,20 @@ jobs:
             sshpass -p "$SERVER_PASSWORD" ssh -o StrictHostKeyChecking=no administrator@37.60.242.201 bash -c "
             cd Billing-System-API
             
-            cat > .env << 'ENV_EOF'
-            DATABASE_URL=\$DATABASE_URL
-            BREVO_API_KEY=\$BREVO_API_KEY
-            BREVO_SENDER_EMAIL=\$BREVO_SENDER_EMAIL
-            BREVO_SENDER_NAME=\$BREVO_SENDER_NAME
-            FRONTEND_VERIFY_URL=\$FRONTEND_VERIFY_URL
-            JWT_SECRET_KEY=\$JWT_SECRET_KEY
-            JWT_REFRESH_SECRET_KEY=\$JWT_REFRESH_SECRET_KEY
-            JWT_ALGORITHM=\$JWT_ALGORITHM
-            JWT_ACCESS_TOKEN_EXPIRE_MINUTES=\$JWT_ACCESS_TOKEN_EXPIRE_MINUTES
-            JWT_REFRESH_TOKEN_EXPIRE_DAYS=\$JWT_REFRESH_TOKEN_EXPIRE_DAYS
-            CLOUDINARY_CLOUD_NAME=\$CLOUDINARY_CLOUD_NAME
-            CLOUDINARY_API_KEY=\$CLOUDINARY_API_KEY
-            CLOUDINARY_API_SECRET=\$CLOUDINARY_API_SECRET
-            DEBUG=\$DEBUG
-            ENV_EOF
+            echo 'DATABASE_URL='\"$DATABASE_URL\" > .env
+            echo 'BREVO_API_KEY='\"$BREVO_API_KEY\" >> .env
+            echo 'BREVO_SENDER_EMAIL='\"$BREVO_SENDER_EMAIL\" >> .env
+            echo 'BREVO_SENDER_NAME='\"$BREVO_SENDER_NAME\" >> .env
+            echo 'FRONTEND_VERIFY_URL='\"$FRONTEND_VERIFY_URL\" >> .env
+            echo 'JWT_SECRET_KEY='\"$JWT_SECRET_KEY\" >> .env
+            echo 'JWT_REFRESH_SECRET_KEY='\"$JWT_REFRESH_SECRET_KEY\" >> .env
+            echo 'JWT_ALGORITHM='\"$JWT_ALGORITHM\" >> .env
+            echo 'JWT_ACCESS_TOKEN_EXPIRE_MINUTES='\"$JWT_ACCESS_TOKEN_EXPIRE_MINUTES\" >> .env
+            echo 'JWT_REFRESH_TOKEN_EXPIRE_DAYS='\"$JWT_REFRESH_TOKEN_EXPIRE_DAYS\" >> .env
+            echo 'CLOUDINARY_CLOUD_NAME='\"$CLOUDINARY_CLOUD_NAME\" >> .env
+            echo 'CLOUDINARY_API_KEY='\"$CLOUDINARY_API_KEY\" >> .env
+            echo 'CLOUDINARY_API_SECRET='\"$CLOUDINARY_API_SECRET\" >> .env
+            echo 'DEBUG='\"$DEBUG\" >> .env
             
             git pull origin main
             docker-compose down
