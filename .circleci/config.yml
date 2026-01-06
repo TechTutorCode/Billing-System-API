@@ -27,11 +27,11 @@ jobs:
       - run:
           name: Deploy to Server
           command: |
-            sshpass -p "$SERVER_PASSWORD" ssh -o StrictHostKeyChecking=no administrator@37.60.242.201 \<< 'EOF'
-            cd Billing-System-API
-            
-            # Create .env dynamically on the server
-            cat > .env << 'EOL'
+            sshpass -p "$SERVER_PASSWORD" ssh -o StrictHostKeyChecking=no administrator@37.60.242.201 << 'EOF'
+              cd Billing-System-API
+              
+              # Create .env dynamically on the server
+              cat > .env << 'EOL'
 DATABASE_URL=$DATABASE_URL
 BREVO_API_KEY=$BREVO_API_KEY
 BREVO_SENDER_EMAIL=$BREVO_SENDER_EMAIL
@@ -47,13 +47,13 @@ CLOUDINARY_API_KEY=$CLOUDINARY_API_KEY
 CLOUDINARY_API_SECRET=$CLOUDINARY_API_SECRET
 DEBUG=$DEBUG
 EOL
-            
-            # Pull latest code
-            git pull origin main
-            
-            # Rebuild and restart containers
-            docker-compose down
-            docker-compose up --build -d
+
+              # Pull latest code
+              git pull origin main
+              
+              # Rebuild and restart containers
+              docker-compose down
+              docker-compose up --build -d
 EOF
 
 workflows:
