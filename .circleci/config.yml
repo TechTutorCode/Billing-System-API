@@ -28,6 +28,7 @@ jobs:
           name: Deploy to Server
           command: |
             sshpass -p "$SERVER_PASSWORD" ssh -o StrictHostKeyChecking=no root@37.60.242.201 bash -c "
+            cd apps
             cd Billing-System-API
             
             echo 'DATABASE_URL='\"$DATABASE_URL\" > .env
