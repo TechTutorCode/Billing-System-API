@@ -8,6 +8,8 @@ COPY requirements.txt /code/requirements.txt
 # Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 RUN pip install "fastapi[standard]"
+RUN pip install PyJWT
+
 # Copy the rest of the code
 COPY . /code
 
