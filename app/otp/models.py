@@ -39,3 +39,4 @@ class LoginOTP(Base):
     def __repr__(self):
         return f"<LoginOTP(id={self.id}, isp_id={self.isp_id}, otp_code={self.otp_code[:2]}**, session_id={self.session_id[:10]}...)>"
 
+

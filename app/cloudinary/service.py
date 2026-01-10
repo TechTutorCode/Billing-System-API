@@ -84,3 +84,4 @@ class CloudinaryService:
 # Global instance
 cloudinary_service = CloudinaryService()
 
+

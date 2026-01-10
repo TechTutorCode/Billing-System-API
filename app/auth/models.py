@@ -38,3 +38,4 @@ class RefreshToken(Base):
     def __repr__(self):
         return f"<RefreshToken(id={self.id}, isp_id={self.isp_id}, token={self.token[:10]}..., revoked={self.revoked})>"
 
+

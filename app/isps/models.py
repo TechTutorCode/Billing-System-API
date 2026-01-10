@@ -33,3 +33,4 @@ class ISPDetails(Base):
     def __repr__(self):
         return f"<ISPDetails(id={self.id}, email={self.email}, name={self.name})>"
 
+

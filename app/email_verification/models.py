@@ -37,3 +37,4 @@ class EmailVerification(Base):
     def __repr__(self):
         return f"<EmailVerification(id={self.id}, isp_id={self.isp_id}, token={self.token[:10]}...)>"
 
+
