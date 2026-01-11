@@ -3,53 +3,67 @@ version: 2.1
 executors:
   docker-executor:
     docker:
-      - image: cimg/python:3.11
+      - image: cimg/python:3.12  # match your Dockerfile
     working_directory: ~/repo
-
 
 jobs:
   build:
     executor: docker-executor
     steps:
       - checkout
+
+      # Setup remote Docker to build images
       - setup_remote_docker
+
+      # Build the Docker image
       - run:
           name: Build Docker Image
-          command: docker build -t billing-system-api .
+          command: |
+            docker build -t billing-system-api .
+
+      # Verify ovpn-user.sh exists and is executable
+      - run:
+          name: Check VPN Script
+          command: |
+            docker run --rm billing-system-api ls -l /usr/local/bin/ovpn-user.sh
 
   deploy:
     executor: docker-executor
     steps:
+      - checkout
+
       - run:
           name: Install sshpass
           command: |
             sudo apt-get update
             sudo apt-get install -y sshpass
+
       - run:
           name: Deploy to Server
           command: |
             sshpass -p "$SERVER_PASSWORD" ssh -o StrictHostKeyChecking=no root@37.60.242.201 bash -c "
-            cd apps
-            cd Billing-System-API
-            
-            echo 'DATABASE_URL='\"$DATABASE_URL\" > .env
-            echo 'BREVO_API_KEY='\"$BREVO_API_KEY\" >> .env
-            echo 'BREVO_SENDER_EMAIL='\"$BREVO_SENDER_EMAIL\" >> .env
-            echo 'BREVO_SENDER_NAME='\"$BREVO_SENDER_NAME\" >> .env
-            echo 'FRONTEND_VERIFY_URL='\"$FRONTEND_VERIFY_URL\" >> .env
-            echo 'JWT_SECRET_KEY='\"$JWT_SECRET_KEY\" >> .env
-            echo 'JWT_REFRESH_SECRET_KEY='\"$JWT_REFRESH_SECRET_KEY\" >> .env
-            echo 'JWT_ALGORITHM='\"$JWT_ALGORITHM\" >> .env
-            echo 'JWT_ACCESS_TOKEN_EXPIRE_MINUTES='\"$JWT_ACCESS_TOKEN_EXPIRE_MINUTES\" >> .env
-            echo 'JWT_REFRESH_TOKEN_EXPIRE_DAYS='\"$JWT_REFRESH_TOKEN_EXPIRE_DAYS\" >> .env
-            echo 'CLOUDINARY_CLOUD_NAME='\"$CLOUDINARY_CLOUD_NAME\" >> .env
-            echo 'CLOUDINARY_API_KEY='\"$CLOUDINARY_API_KEY\" >> .env
-            echo 'CLOUDINARY_API_SECRET='\"$CLOUDINARY_API_SECRET\" >> .env
-            echo 'DEBUG='\"$DEBUG\" >> .env
-            
-            git pull origin main
-            docker compose down
-            docker compose up --build -d
+              set -e
+              cd ~/apps/Billing-System-API
+
+              # Write environment variables
+              echo 'DATABASE_URL=\"$DATABASE_URL\"' > .env
+              echo 'BREVO_API_KEY=\"$BREVO_API_KEY\"' >> .env
+              echo 'BREVO_SENDER_EMAIL=\"$BREVO_SENDER_EMAIL\"' >> .env
+              echo 'BREVO_SENDER_NAME=\"$BREVO_SENDER_NAME\"' >> .env
+              echo 'FRONTEND_VERIFY_URL=\"$FRONTEND_VERIFY_URL\"' >> .env
+              echo 'JWT_SECRET_KEY=\"$JWT_SECRET_KEY\"' >> .env
+              echo 'JWT_REFRESH_SECRET_KEY=\"$JWT_REFRESH_SECRET_KEY\"' >> .env
+              echo 'JWT_ALGORITHM=\"$JWT_ALGORITHM\"' >> .env
+              echo 'JWT_ACCESS_TOKEN_EXPIRE_MINUTES=\"$JWT_ACCESS_TOKEN_EXPIRE_MINUTES\"' >> .env
+              echo 'JWT_REFRESH_TOKEN_EXPIRE_DAYS=\"$JWT_REFRESH_TOKEN_EXPIRE_DAYS\"' >> .env
+              echo 'CLOUDINARY_CLOUD_NAME=\"$CLOUDINARY_CLOUD_NAME\"' >> .env
+              echo 'CLOUDINARY_API_KEY=\"$CLOUDINARY_API_KEY\"' >> .env
+              echo 'CLOUDINARY_API_SECRET=\"$CLOUDINARY_API_SECRET\"' >> .env
+              echo 'DEBUG=\"$DEBUG\"' >> .env
+
+              git pull origin main
+              docker compose down
+              docker compose up --build -d
             "
 
 workflows:
