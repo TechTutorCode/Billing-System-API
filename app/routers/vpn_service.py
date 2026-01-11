@@ -30,9 +30,10 @@ class VPNService:
             HTTPException: If user creation fails
         """
         try:
+            print(OVPN_USER_SCRIPT)
             # Call ovpn-user.sh add command with sudo
             result = subprocess.run(
-                ["sudo", OVPN_USER_SCRIPT, "add", username, password],
+                [ OVPN_USER_SCRIPT, "add", username, password],
                 capture_output=True,
                 text=True,
                 timeout=30,
