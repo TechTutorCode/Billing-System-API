@@ -46,6 +46,10 @@ class Settings:
         self.JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "60"))  # 1 hour
         self.JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = int(os.getenv("JWT_REFRESH_TOKEN_EXPIRE_DAYS", "30"))  # 30 days
 
+        # OpenVPN settings
+        self.OPENVPN_SERVER_IP: str = os.getenv("OPENVPN_SERVER_IP", "")
+        self.OPENVPN_SERVER_PORT: int = int(os.getenv("OPENVPN_SERVER_PORT", "1194"))
+
 
 @lru_cache()
 def get_settings() -> Settings:

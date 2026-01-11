@@ -1,0 +1,147 @@
+"""Background task for monitoring router status from OpenVPN logs."""
+
+import logging
+import re
+from datetime import datetime, timezone
+from typing import Dict, Optional
+
+from sqlalchemy.orm import Session
+
+from app.database import SessionLocal
+from app.routers.models import Router, RouterStatus
+from app.routers.services import router_service
+from app.routers.mikrotik_service import mikrotik_service
+
+logger = logging.getLogger(__name__)
+
+OPENVPN_STATUS_LOG = "/var/log/openvpn-status.log"
+
+
+def parse_openvpn_status_log() -> Dict[str, str]:
+    """
+    Parse OpenVPN status log to extract VPN IPs mapped to usernames.
+
+    Returns:
+        Dictionary mapping vpn_username to vpn_ip
+    """
+    username_to_ip: Dict[str, str] = {}
+
+    try:
+        with open(OPENVPN_STATUS_LOG, "r") as f:
+            content = f.read()
+
+        # Parse OpenVPN status log format
+        # Look for client list section
+        client_section_match = re.search(
+            r"CLIENT_LIST\s+(.*?)(?=ROUTING_TABLE|$)",
+            content,
+            re.DOTALL
+        )
+
+        if client_section_match:
+            client_lines = client_section_match.group(1).strip().split("\n")
+            for line in client_lines:
+                if not line.strip() or line.startswith("Common"):
+                    continue
+
+                # Parse line: Common Name,Real Address,Virtual Address,Bytes Received,Bytes Sent,Connected Since
+                parts = line.split(",")
+                if len(parts) >= 3:
+                    username = parts[0].strip()
+                    virtual_ip = parts[2].strip()
+                    if username and virtual_ip:
+                        username_to_ip[username] = virtual_ip
+
+    except FileNotFoundError:
+        logger.warning(f"OpenVPN status log not found at {OPENVPN_STATUS_LOG}")
+    except Exception as e:
+        logger.error(f"Error parsing OpenVPN status log: {str(e)}")
+
+    return username_to_ip
+
+
+def update_router_statuses():
+    """
+    Background task to update router statuses based on OpenVPN log and API tests.
+    """
+    db: Session = SessionLocal()
+    try:
+        # Get all active routers
+        routers = db.query(Router).filter(Router.is_active == True).all()
+
+        if not routers:
+            return
+
+        # Parse OpenVPN status log
+        username_to_ip = parse_openvpn_status_log()
+
+        for router in routers:
+            try:
+                vpn_ip = username_to_ip.get(router.vpn_username)
+
+                if vpn_ip:
+                    # Router is connected to VPN
+                    if router.vpn_ip != vpn_ip:
+                        # Update VPN IP
+                        router_service.update_router_status(
+                            db=db,
+                            router=router,
+                            vpn_ip=vpn_ip,
+                            status=RouterStatus.VPN_CONNECTED
+                        )
+
+                    # Test MikroTik API connection
+                    if mikrotik_service.test_api_connection(router.vpn_ip, router.api_port):
+                        # API is accessible, router is online
+                        router_service.update_router_status(
+                            db=db,
+                            router=router,
+                            status=RouterStatus.ONLINE
+                        )
+                    else:
+                        # VPN connected but API not accessible
+                        router_service.update_router_status(
+                            db=db,
+                            router=router,
+                            status=RouterStatus.VPN_CONNECTED
+                        )
+                else:
+                    # Router not in VPN log, mark as offline
+                    if router.status != RouterStatus.PENDING.value:
+                        router_service.update_router_status(
+                            db=db,
+                            router=router,
+                            status=RouterStatus.OFFLINE
+                        )
+
+            except Exception as e:
+                logger.error(f"Error updating status for router {router.id}: {str(e)}")
+                continue
+
+    except Exception as e:
+        logger.error(f"Error in router status monitor: {str(e)}")
+    finally:
+        db.close()
+
+
+def start_status_monitor():
+    """
+    Start background task for router status monitoring.
+    This should be called from a background task scheduler (e.g., APScheduler, Celery, or asyncio).
+    """
+    import asyncio
+    import time
+
+    async def monitor_loop():
+        while True:
+            try:
+                update_router_statuses()
+                # Run every 60 seconds
+                await asyncio.sleep(60)
+            except Exception as e:
+                logger.error(f"Error in status monitor loop: {str(e)}")
+                await asyncio.sleep(60)
+
+    # Run in background
+    asyncio.create_task(monitor_loop())
+

@@ -7,6 +7,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.auth.routes import router as auth_router
 from app.isps.routes import router as isp_router
+from app.routers.routes import router as router_router
 from app.config import get_settings
 from app.database import Base, engine
 
@@ -15,6 +16,7 @@ from app.isps import models as isp_models  # noqa: F401
 from app.email_verification import models as email_verification_models  # noqa: F401
 from app.otp import models as otp_models  # noqa: F401
 from app.auth import models as auth_models  # noqa: F401
+from app.routers import models as router_models  # noqa: F401
 
 settings = get_settings()
 
@@ -85,6 +87,33 @@ async def general_exception_handler(request: Request, exc: Exception):
 # Include routers
 app.include_router(auth_router)
 app.include_router(isp_router)
+app.include_router(router_router)
+
+
+# Start router status monitor background task
+@app.on_event("startup")
+async def startup_event():
+    """Start background tasks on application startup."""
+    import asyncio
+    from app.routers.status_monitor import update_router_statuses
+    
+    async def monitor_loop():
+        """Background task to monitor router statuses."""
+        while True:
+            try:
+                # Run in thread pool to avoid blocking
+                loop = asyncio.get_event_loop()
+                await loop.run_in_executor(None, update_router_statuses)
+                # Run every 60 seconds
+                await asyncio.sleep(60)
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Error in status monitor loop: {str(e)}")
+                await asyncio.sleep(60)
+    
+    # Start background task
+    asyncio.create_task(monitor_loop())
 
 
 @app.get("/", tags=["root"])
