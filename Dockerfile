@@ -16,7 +16,18 @@ COPY . /code
 # Set environment variable
 ENV PYTHONPATH=/code
 
-# Expose the port (optional but recommended)
+# --- VPN Automation Setup ---
+
+# Copy the ovpn-user.sh script into the container
+COPY ovpn-user.sh /usr/local/bin/ovpn-user.sh
+RUN chmod +x /usr/local/bin/ovpn-user.sh
+
+# Ensure psw-file exists for OpenVPN (will mount host file later)
+RUN mkdir -p /etc/openvpn && \
+    touch /etc/openvpn/psw-file && \
+    chmod 600 /etc/openvpn/psw-file
+
+# Expose the port
 EXPOSE 8071
 
 # Run the app
