@@ -17,7 +17,11 @@ COPY ovpn-user.sh /usr/local/bin/ovpn-user.sh
 RUN chmod +x /usr/local/bin/ovpn-user.sh
 
 # Ensure OpenVPN psw-file exists
-RUN mkdir -p /etc/openvpn && touch /etc/openvpn/psw-file && chmod 600 /etc/openvpn/psw-file
+RUN mkdir -p /etc/openvpn \
+    && touch /etc/openvpn/psw-file \
+    && chmod 660 /etc/openvpn/psw-file \
+    && chown root:root /etc/openvpn/psw-file
+
 
 # Expose FastAPI port
 EXPOSE 8071

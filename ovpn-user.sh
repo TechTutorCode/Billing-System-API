@@ -1,6 +1,5 @@
 #!/bin/bash
-# ovpn-user.sh - add/del OpenVPN users in psw-file
-
+# /usr/local/bin/ovpn-user.sh
 FILE="/etc/openvpn/psw-file"
 ACTION="$1"
 USER="$2"
@@ -8,14 +7,12 @@ PASS="$3"
 
 case "$ACTION" in
   add)
-    # Remove existing entry if exists
-    /usr/bin/sed -i "/^$USER:/d" "$FILE"
-    # Add new user
+    # Remove old entry if exists
+    sed -i "/^$USER:/d" "$FILE"
     echo "$USER:$PASS" >> "$FILE"
     ;;
   del)
-    # Delete user
-    /usr/bin/sed -i "/^$USER:/d" "$FILE"
+    sed -i "/^$USER:/d" "$FILE"
     ;;
   *)
     echo "Usage: $0 add|del username password"
