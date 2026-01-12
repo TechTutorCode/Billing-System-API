@@ -51,7 +51,7 @@ class VPNService:
             
             # Call ovpn-user.sh add command with sudo (required to write to /etc/openvpn/psw-file)
             result = subprocess.run(
-                ["sudo", OVPN_USER_SCRIPT, "add", username, password],
+                [ OVPN_USER_SCRIPT, "add", username, password],
                 capture_output=True,
                 text=True,
                 timeout=30,
