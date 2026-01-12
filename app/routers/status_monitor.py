@@ -23,6 +23,10 @@ def parse_openvpn_status_log() -> Dict[str, str]:
     """
     Parse OpenVPN status log to extract VPN IPs mapped to usernames.
 
+    OpenVPN status log format:
+    CLIENT_LIST: Common Name,Real Address,Bytes Received,Bytes Sent,Connected Since
+    ROUTING_TABLE: Virtual Address,Common Name,Real Address,Last Ref
+
     Returns:
         Dictionary mapping vpn_username to vpn_ip
     """
@@ -32,8 +36,30 @@ def parse_openvpn_status_log() -> Dict[str, str]:
         with open(OPENVPN_STATUS_LOG, "r") as f:
             content = f.read()
 
-        # Parse OpenVPN status log format
-        # Look for client list section
+        # Parse ROUTING_TABLE section to get Virtual Address mapped to Common Name
+        # Format: Virtual Address,Common Name,Real Address,Last Ref
+        routing_section_match = re.search(
+            r"ROUTING_TABLE\s+(.*?)(?=GLOBAL STATS|END|$)",
+            content,
+            re.DOTALL
+        )
+
+        if routing_section_match:
+            routing_lines = routing_section_match.group(1).strip().split("\n")
+            for line in routing_lines:
+                if not line.strip() or line.startswith("Virtual"):
+                    continue
+
+                # Parse line: Virtual Address,Common Name,Real Address,Last Ref
+                parts = line.split(",")
+                if len(parts) >= 2:
+                    virtual_ip = parts[0].strip()
+                    username = parts[1].strip()
+                    if username and virtual_ip:
+                        username_to_ip[username] = virtual_ip
+                        logger.debug(f"Found router {username} with VPN IP {virtual_ip}")
+
+        # Also verify in CLIENT_LIST that the router is actually connected
         client_section_match = re.search(
             r"CLIENT_LIST\s+(.*?)(?=ROUTING_TABLE|$)",
             content,
@@ -41,18 +67,25 @@ def parse_openvpn_status_log() -> Dict[str, str]:
         )
 
         if client_section_match:
+            connected_usernames = set()
             client_lines = client_section_match.group(1).strip().split("\n")
             for line in client_lines:
                 if not line.strip() or line.startswith("Common"):
                     continue
 
-                # Parse line: Common Name,Real Address,Virtual Address,Bytes Received,Bytes Sent,Connected Since
+                # Parse line: Common Name,Real Address,Bytes Received,Bytes Sent,Connected Since
                 parts = line.split(",")
-                if len(parts) >= 3:
+                if len(parts) >= 1:
                     username = parts[0].strip()
-                    virtual_ip = parts[2].strip()
-                    if username and virtual_ip:
-                        username_to_ip[username] = virtual_ip
+                    if username:
+                        connected_usernames.add(username)
+
+            # Only keep routers that are in both CLIENT_LIST and ROUTING_TABLE
+            username_to_ip = {
+                username: ip 
+                for username, ip in username_to_ip.items() 
+                if username in connected_usernames
+            }
 
     except FileNotFoundError:
         logger.warning(f"OpenVPN status log not found at {OPENVPN_STATUS_LOG}")
@@ -76,10 +109,13 @@ def update_router_statuses():
 
         # Parse OpenVPN status log
         username_to_ip = parse_openvpn_status_log()
+        
+        logger.info(f"Parsed {len(username_to_ip)} routers from OpenVPN status log: {username_to_ip}")
 
         for router in routers:
             try:
                 vpn_ip = username_to_ip.get(router.vpn_username)
+                logger.debug(f"Checking router {router.vpn_username} (current status: {router.status}, current VPN IP: {router.vpn_ip})")
 
                 if vpn_ip:
                     # Router is connected to VPN
@@ -92,8 +128,8 @@ def update_router_statuses():
                             status=RouterStatus.VPN_CONNECTED
                         )
 
-                    # Test MikroTik API connection
-                    if mikrotik_service.test_api_connection(router.vpn_ip, router.api_port):
+                    # Test MikroTik API connection (use the newly parsed vpn_ip)
+                    if mikrotik_service.test_api_connection(vpn_ip, router.api_port):
                         # API is accessible, router is online
                         router_service.update_router_status(
                             db=db,
