@@ -51,6 +51,13 @@ class Settings:
         self.OPENVPN_SERVER_PORT: int = int(os.getenv("OPENVPN_SERVER_PORT", "1194"))
         self.OPENVPN_STATUS_LOG: str = os.getenv("OPENVPN_STATUS_LOG", "/var/log/openvpn-status.log")
 
+        # SSH settings for host machine access
+        self.SSH_HOST: str = os.getenv("SSH_HOST", "localhost")
+        self.SSH_USER: str = os.getenv("SSH_USER", "root")
+        self.SSH_KEY_PATH: str = os.getenv("SSH_KEY_PATH", "/root/.ssh/id_rsa")
+        self.SSH_PORT: int = int(os.getenv("SSH_PORT", "22"))
+        self.SSH_STRICT_HOST_KEY_CHECKING: str = os.getenv("SSH_STRICT_HOST_KEY_CHECKING", "no")
+
 
 @lru_cache()
 def get_settings() -> Settings:
