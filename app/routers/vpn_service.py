@@ -32,8 +32,11 @@ class VPNService:
         Returns:
             List of command arguments for subprocess
         """
+        # Ensure SSH options have valid values
+        strict_host_check = settings.SSH_STRICT_HOST_KEY_CHECKING or "no"
+        
         ssh_opts = [
-            "-o", f"StrictHostKeyChecking={settings.SSH_STRICT_HOST_KEY_CHECKING}",
+            "-o", f"StrictHostKeyChecking={strict_host_check}",
             "-o", "UserKnownHostsFile=/dev/null",
             "-o", "LogLevel=ERROR",
             "-i", settings.SSH_KEY_PATH,

@@ -60,7 +60,8 @@ class Settings:
         self.SSH_KEY_PATH: str = os.getenv("SSH_KEY_PATH", "/root/.ssh/id_rsa")
         ssh_port = os.getenv("SSH_PORT", "22")
         self.SSH_PORT: int = int(ssh_port) if ssh_port else 22
-        self.SSH_STRICT_HOST_KEY_CHECKING: str = os.getenv("SSH_STRICT_HOST_KEY_CHECKING", "no")
+        ssh_strict_check = os.getenv("SSH_STRICT_HOST_KEY_CHECKING", "no")
+        self.SSH_STRICT_HOST_KEY_CHECKING: str = ssh_strict_check if ssh_strict_check else "no"
 
 
 @lru_cache()
