@@ -30,25 +30,48 @@ class VPNService:
             HTTPException: If user creation fails
         """
         try:
-            print(OVPN_USER_SCRIPT)
-            # Call ovpn-user.sh add command with sudo
+            # Check if script exists
+            import os
+            if not os.path.exists(OVPN_USER_SCRIPT):
+                logger.error(f"VPN script not found at {OVPN_USER_SCRIPT}")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"VPN user management script not found at {OVPN_USER_SCRIPT}"
+                )
+
+            # Check if script is executable
+            if not os.access(OVPN_USER_SCRIPT, os.X_OK):
+                logger.error(f"VPN script is not executable: {OVPN_USER_SCRIPT}")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"VPN user management script is not executable"
+                )
+
+            logger.info(f"Calling VPN script: {OVPN_USER_SCRIPT} add {username}")
+            
+            # Call ovpn-user.sh add command with sudo (required to write to /etc/openvpn/psw-file)
             result = subprocess.run(
-                [ OVPN_USER_SCRIPT, "add", username, password],
+                ["sudo", OVPN_USER_SCRIPT, "add", username, password],
                 capture_output=True,
                 text=True,
                 timeout=30,
                 check=False
             )
 
+            # Log full output for debugging
+            logger.debug(f"Script return code: {result.returncode}")
+            logger.debug(f"Script stdout: {result.stdout}")
+            logger.debug(f"Script stderr: {result.stderr}")
+
             if result.returncode != 0:
-                error_msg = result.stderr or result.stdout or "Unknown error"
-                logger.error(f"Failed to add VPN user {username}: {error_msg}")
+                error_msg = result.stderr.strip() or result.stdout.strip() or "Unknown error"
+                logger.error(f"Failed to add VPN user {username}. Return code: {result.returncode}, Error: {error_msg}")
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail=f"Failed to create VPN user: {error_msg}"
                 )
 
-            logger.info(f"VPN user {username} added successfully")
+            logger.info(f"VPN user {username} added successfully. Output: {result.stdout.strip()}")
             return True
 
         except subprocess.TimeoutExpired:
