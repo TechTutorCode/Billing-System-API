@@ -57,7 +57,9 @@ class Settings:
         # SSH settings for host machine access
         self.SSH_HOST: str = os.getenv("SSH_HOST", "localhost")
         self.SSH_USER: str = os.getenv("SSH_USER", "root")
-        self.SSH_KEY_PATH: str = os.getenv("SSH_KEY_PATH", "/root/.ssh/id_rsa")
+        self.SSH_PASSWORD: str = os.getenv("SSH_PASSWORD", "")
+        # SSH key path (optional, used only if password is not provided)
+        self.SSH_KEY_PATH: str = os.getenv("SSH_KEY_PATH", "")
         ssh_port = os.getenv("SSH_PORT", "22")
         self.SSH_PORT: int = int(ssh_port) if ssh_port else 22
         ssh_strict_check = os.getenv("SSH_STRICT_HOST_KEY_CHECKING", "no")

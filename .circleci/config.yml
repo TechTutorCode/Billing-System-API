@@ -58,7 +58,7 @@ jobs:
               echo 'OPENVPN_STATUS_LOG=\"$OPENVPN_STATUS_LOG\"' >> .env
               echo 'SSH_HOST=\"$SSH_HOST\"' >> .env
               echo 'SSH_USER=\"$SSH_USER\"' >> .env
-              echo 'SSH_KEY_PATH=\"$SSH_KEY_PATH\"' >> .env
+              echo 'SSH_PASSWORD=\"$SSH_PASSWORD\"' >> .env
               echo 'SSH_PORT=\"$SSH_PORT\"' >> .env
               echo 'SSH_STRICT_HOST_KEY_CHECKING=\"$SSH_STRICT_HOST_KEY_CHECKING\"' >> .env
               echo 'DEBUG=\"$DEBUG\"' >> .env

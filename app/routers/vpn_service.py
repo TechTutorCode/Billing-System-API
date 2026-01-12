@@ -25,13 +25,20 @@ class VPNService:
     def _build_ssh_command(remote_command: str) -> list:
         """
         Build SSH command to execute on host machine.
+        Uses sshpass for password authentication if SSH_PASSWORD is set,
+        otherwise falls back to SSH key authentication.
 
         Args:
             remote_command: Command to execute on remote host
 
         Returns:
             List of command arguments for subprocess
+
+        Raises:
+            HTTPException: If neither password nor SSH key is configured
         """
+        import os
+        
         # Ensure SSH options have valid values
         strict_host_check = settings.SSH_STRICT_HOST_KEY_CHECKING or "no"
         
@@ -39,12 +46,39 @@ class VPNService:
             "-o", f"StrictHostKeyChecking={strict_host_check}",
             "-o", "UserKnownHostsFile=/dev/null",
             "-o", "LogLevel=ERROR",
-            "-i", settings.SSH_KEY_PATH,
             "-p", str(settings.SSH_PORT)
         ]
+        
+        # Use password authentication if password is provided
+        if settings.SSH_PASSWORD:
+            # Use sshpass for password-based authentication
+            ssh_cmd = ["sshpass", "-p", settings.SSH_PASSWORD, "ssh"] + ssh_opts
+        elif settings.SSH_KEY_PATH:
+            # Use SSH key authentication
+            ssh_key_path = settings.SSH_KEY_PATH
+            
+            if not os.path.exists(ssh_key_path):
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"SSH key file not found at {ssh_key_path}. Ensure the SSH key is mounted/available in the container."
+                )
+            
+            # Check if key has correct permissions (should be 600 or 400)
+            stat_info = os.stat(ssh_key_path)
+            mode = stat_info.st_mode
+            if mode & 0o077:
+                logger.warning(f"SSH key {ssh_key_path} has permissions {oct(mode & 0o777)}. Recommend 600 for security.")
+            
+            ssh_opts.extend(["-i", ssh_key_path])
+            ssh_cmd = ["ssh"] + ssh_opts
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="SSH authentication not configured. Please set either SSH_PASSWORD or SSH_KEY_PATH environment variable."
+            )
 
         ssh_target = f"{settings.SSH_USER}@{settings.SSH_HOST}"
-        return ["ssh"] + ssh_opts + [ssh_target, remote_command]
+        return ssh_cmd + [ssh_target, remote_command]
 
     @staticmethod
     def add_vpn_user(username: str, password: str) -> bool:

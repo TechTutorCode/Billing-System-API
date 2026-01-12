@@ -7,4 +7,17 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8071:8071"
-    command: uvicorn main:app --host 0.0.0.0 --port 8071
+    environment:
+      # SSH configuration for host machine access
+      # Use password authentication (recommended for this setup)
+      - SSH_HOST=${SSH_HOST:-localhost}
+      - SSH_USER=${SSH_USER:-root}
+      - SSH_PASSWORD=${SSH_PASSWORD:-nexgen2025}
+      - SSH_PORT=${SSH_PORT:-22}
+      - SSH_STRICT_HOST_KEY_CHECKING=${SSH_STRICT_HOST_KEY_CHECKING:-no}
+      # Optional: Use SSH key instead of password (uncomment and mount key if needed)
+      # - SSH_KEY_PATH=${SSH_KEY_PATH:-/root/.ssh/id_rsa}
+    # Uncomment if using SSH key authentication instead of password
+    # volumes:
+    #   - ~/.ssh/id_rsa:/root/.ssh/id_rsa:ro
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8071
