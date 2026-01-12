@@ -2,6 +2,7 @@
 
 import logging
 import re
+import subprocess
 from datetime import datetime, timezone
 from typing import Dict, Optional
 
@@ -19,9 +20,47 @@ settings = get_settings()
 OPENVPN_STATUS_LOG = settings.OPENVPN_STATUS_LOG
 
 
+def _build_ssh_command(remote_command: str) -> list:
+    """
+    Build SSH command to execute on host machine (same as VPN service).
+
+    Args:
+        remote_command: Command to execute on remote host
+
+    Returns:
+        List of command arguments for subprocess
+    """
+    # Ensure SSH options have valid values
+    strict_host_check = settings.SSH_STRICT_HOST_KEY_CHECKING or "no"
+    
+    ssh_opts = [
+        "-o", f"StrictHostKeyChecking={strict_host_check}",
+        "-o", "UserKnownHostsFile=/dev/null",
+        "-o", "LogLevel=ERROR",
+        "-p", str(settings.SSH_PORT)
+    ]
+    
+    # Use password authentication if password is provided
+    if settings.SSH_PASSWORD:
+        # Use sshpass for password-based authentication
+        ssh_cmd = ["sshpass", "-p", settings.SSH_PASSWORD, "ssh"] + ssh_opts
+    elif settings.SSH_KEY_PATH:
+        # Use SSH key authentication
+        import os
+        if os.path.exists(settings.SSH_KEY_PATH):
+            ssh_opts.extend(["-i", settings.SSH_KEY_PATH])
+        ssh_cmd = ["ssh"] + ssh_opts
+    else:
+        raise ValueError("SSH authentication not configured. Please set either SSH_PASSWORD or SSH_KEY_PATH")
+
+    ssh_target = f"{settings.SSH_USER}@{settings.SSH_HOST}"
+    return ssh_cmd + [ssh_target, remote_command]
+
+
 def parse_openvpn_status_log() -> Dict[str, str]:
     """
     Parse OpenVPN status log to extract VPN IPs mapped to usernames.
+    Reads the log file from the host machine via SSH.
 
     OpenVPN status log format:
     CLIENT_LIST: Common Name,Real Address,Bytes Received,Bytes Sent,Connected Since
@@ -33,8 +72,25 @@ def parse_openvpn_status_log() -> Dict[str, str]:
     username_to_ip: Dict[str, str] = {}
 
     try:
-        with open(OPENVPN_STATUS_LOG, "r") as f:
-            content = f.read()
+        # Read OpenVPN status log from host machine via SSH
+        remote_command = f"cat {OPENVPN_STATUS_LOG}"
+        ssh_cmd = _build_ssh_command(remote_command)
+        
+        logger.debug(f"Reading OpenVPN status log from host via SSH: {OPENVPN_STATUS_LOG}")
+        result = subprocess.run(
+            ssh_cmd,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False
+        )
+        
+        if result.returncode != 0:
+            error_msg = result.stderr.strip() if result.stderr else result.stdout.strip() or "Unknown error"
+            logger.warning(f"Failed to read OpenVPN status log via SSH: {error_msg}")
+            return username_to_ip
+        
+        content = result.stdout
 
         # Parse ROUTING_TABLE section to get Virtual Address mapped to Common Name
         # Format: Virtual Address,Common Name,Real Address,Last Ref
@@ -87,8 +143,13 @@ def parse_openvpn_status_log() -> Dict[str, str]:
                 if username in connected_usernames
             }
 
+    except subprocess.TimeoutExpired:
+        logger.error(f"Timeout reading OpenVPN status log via SSH")
+    except subprocess.CalledProcessError as e:
+        error_msg = e.stderr.strip() if e.stderr else e.stdout.strip() or "Unknown error"
+        logger.warning(f"Failed to read OpenVPN status log via SSH: {error_msg}")
     except FileNotFoundError:
-        logger.warning(f"OpenVPN status log not found at {OPENVPN_STATUS_LOG}")
+        logger.warning(f"SSH command not found. Is OpenSSH client installed?")
     except Exception as e:
         logger.error(f"Error parsing OpenVPN status log: {str(e)}")
 
