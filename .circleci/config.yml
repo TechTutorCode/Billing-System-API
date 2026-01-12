@@ -21,12 +21,6 @@ jobs:
           command: |
             docker build -t billing-system-api .
 
-      # Verify ovpn-user.sh exists and is executable
-      - run:
-          name: Check VPN Script
-          command: |
-            docker run --rm billing-system-api ls -l /usr/local/bin/ovpn-user.sh
-
   deploy:
     executor: docker-executor
     steps:
@@ -59,6 +53,14 @@ jobs:
               echo 'CLOUDINARY_CLOUD_NAME=\"$CLOUDINARY_CLOUD_NAME\"' >> .env
               echo 'CLOUDINARY_API_KEY=\"$CLOUDINARY_API_KEY\"' >> .env
               echo 'CLOUDINARY_API_SECRET=\"$CLOUDINARY_API_SECRET\"' >> .env
+              echo 'OPENVPN_SERVER_IP=\"$OPENVPN_SERVER_IP\"' >> .env
+              echo 'OPENVPN_SERVER_PORT=\"$OPENVPN_SERVER_PORT\"' >> .env
+              echo 'OPENVPN_STATUS_LOG=\"$OPENVPN_STATUS_LOG\"' >> .env
+              echo 'SSH_HOST=\"$SSH_HOST\"' >> .env
+              echo 'SSH_USER=\"$SSH_USER\"' >> .env
+              echo 'SSH_KEY_PATH=\"$SSH_KEY_PATH\"' >> .env
+              echo 'SSH_PORT=\"$SSH_PORT\"' >> .env
+              echo 'SSH_STRICT_HOST_KEY_CHECKING=\"$SSH_STRICT_HOST_KEY_CHECKING\"' >> .env
               echo 'DEBUG=\"$DEBUG\"' >> .env
 
               git pull origin main
