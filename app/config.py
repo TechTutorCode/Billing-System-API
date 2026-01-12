@@ -43,19 +43,23 @@ class Settings:
         self.JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "")
         self.JWT_REFRESH_SECRET_KEY: str = os.getenv("JWT_REFRESH_SECRET_KEY", self.JWT_SECRET_KEY)  # Defaults to same as access token key
         self.JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
-        self.JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "60"))  # 1 hour
-        self.JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = int(os.getenv("JWT_REFRESH_TOKEN_EXPIRE_DAYS", "30"))  # 30 days
+        jwt_access_expire = os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "60")
+        self.JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = int(jwt_access_expire) if jwt_access_expire else 60  # 1 hour
+        jwt_refresh_expire = os.getenv("JWT_REFRESH_TOKEN_EXPIRE_DAYS", "30")
+        self.JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = int(jwt_refresh_expire) if jwt_refresh_expire else 30  # 30 days
 
         # OpenVPN settings
         self.OPENVPN_SERVER_IP: str = os.getenv("OPENVPN_SERVER_IP", "37.60.242.201")
-        self.OPENVPN_SERVER_PORT: int = int(os.getenv("OPENVPN_SERVER_PORT", "1194"))
+        openvpn_port = os.getenv("OPENVPN_SERVER_PORT", "1194")
+        self.OPENVPN_SERVER_PORT: int = int(openvpn_port) if openvpn_port else 1194
         self.OPENVPN_STATUS_LOG: str = os.getenv("OPENVPN_STATUS_LOG", "/var/log/openvpn-status.log")
 
         # SSH settings for host machine access
         self.SSH_HOST: str = os.getenv("SSH_HOST", "localhost")
         self.SSH_USER: str = os.getenv("SSH_USER", "root")
         self.SSH_KEY_PATH: str = os.getenv("SSH_KEY_PATH", "/root/.ssh/id_rsa")
-        self.SSH_PORT: int = int(os.getenv("SSH_PORT", "22"))
+        ssh_port = os.getenv("SSH_PORT", "22")
+        self.SSH_PORT: int = int(ssh_port) if ssh_port else 22
         self.SSH_STRICT_HOST_KEY_CHECKING: str = os.getenv("SSH_STRICT_HOST_KEY_CHECKING", "no")
 
 
