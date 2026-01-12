@@ -7,6 +7,7 @@ from typing import Dict, Optional
 
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.database import SessionLocal
 from app.routers.models import Router, RouterStatus
 from app.routers.services import router_service
@@ -14,7 +15,8 @@ from app.routers.mikrotik_service import mikrotik_service
 
 logger = logging.getLogger(__name__)
 
-OPENVPN_STATUS_LOG = "/var/log/openvpn-status.log"
+settings = get_settings()
+OPENVPN_STATUS_LOG = settings.OPENVPN_STATUS_LOG
 
 
 def parse_openvpn_status_log() -> Dict[str, str]:

@@ -59,9 +59,9 @@ class VPNService:
             )
 
             # Log full output for debugging
-            logger.debug(f"Script return code: {result.returncode}")
-            logger.debug(f"Script stdout: {result.stdout}")
-            logger.debug(f"Script stderr: {result.stderr}")
+            logger.info(f"Script return code: {result.returncode}")
+            logger.info(f"Script stdout: {result.stdout}")
+            logger.info(f"Script stderr: {result.stderr}")
 
             if result.returncode != 0:
                 error_msg = result.stderr.strip() or result.stdout.strip() or "Unknown error"
@@ -70,6 +70,22 @@ class VPNService:
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail=f"Failed to create VPN user: {error_msg}"
                 )
+
+            # Verify user was actually added to psw-file
+            import os
+            psw_file = "/etc/openvpn/psw-file"
+            if os.path.exists(psw_file):
+                try:
+                    with open(psw_file, 'r') as f:
+                        content = f.read()
+                        if f"{username}:" in content:
+                            logger.info(f"Verified: VPN user {username} exists in {psw_file}")
+                        else:
+                            logger.warning(f"Warning: VPN user {username} not found in {psw_file} after creation")
+                except PermissionError:
+                    logger.warning(f"Cannot verify {psw_file} - permission denied (this is expected if not running as root)")
+                except Exception as e:
+                    logger.warning(f"Could not verify {psw_file}: {str(e)}")
 
             logger.info(f"VPN user {username} added successfully. Output: {result.stdout.strip()}")
             return True

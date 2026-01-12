@@ -49,6 +49,7 @@ class Settings:
         # OpenVPN settings
         self.OPENVPN_SERVER_IP: str = os.getenv("OPENVPN_SERVER_IP", "37.60.242.201")
         self.OPENVPN_SERVER_PORT: int = int(os.getenv("OPENVPN_SERVER_PORT", "1194"))
+        self.OPENVPN_STATUS_LOG: str = os.getenv("OPENVPN_STATUS_LOG", "/var/log/openvpn-status.log")
 
 
 @lru_cache()
