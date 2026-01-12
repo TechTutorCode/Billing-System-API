@@ -55,7 +55,11 @@ class Settings:
         self.OPENVPN_STATUS_LOG: str = os.getenv("OPENVPN_STATUS_LOG", "/var/log/openvpn-status.log")
 
         # SSH settings for host machine access
-        self.SSH_HOST: str = os.getenv("SSH_HOST", "localhost")
+        # Default to actual server IP address
+        # Alternative options:
+        # - host.docker.internal (with extra_hosts in docker-compose)
+        # - 172.17.0.1 (Docker bridge gateway on Linux)
+        self.SSH_HOST: str = os.getenv("SSH_HOST", "37.60.242.201")
         self.SSH_USER: str = os.getenv("SSH_USER", "root")
         self.SSH_PASSWORD: str = os.getenv("SSH_PASSWORD", "")
         # SSH key path (optional, used only if password is not provided)

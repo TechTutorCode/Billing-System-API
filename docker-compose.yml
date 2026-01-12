@@ -7,10 +7,16 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8071:8071"
+    # Use host network mode to access host machine directly
+    # Alternative: use extra_hosts to add host.docker.internal
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       # SSH configuration for host machine access
       # Use password authentication (recommended for this setup)
-      - SSH_HOST=${SSH_HOST:-localhost}
+      # SSH_HOST is set to actual server IP address by default
+      # Alternative options: host.docker.internal or 172.17.0.1
+      - SSH_HOST=${SSH_HOST:-37.60.242.201}
       - SSH_USER=${SSH_USER:-root}
       - SSH_PASSWORD=${SSH_PASSWORD:-nexgen2025}
       - SSH_PORT=${SSH_PORT:-22}
