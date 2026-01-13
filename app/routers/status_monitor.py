@@ -97,10 +97,12 @@ def parse_openvpn_status_log() -> Dict[str, str]:
         
         content = result.stdout
         logger.info(f"[MONITOR] Successfully read OpenVPN status log ({len(content)} characters)")
-        logger.debug(f"[MONITOR] OpenVPN status log content (first 500 chars):\n{content[:500]}...")
+        logger.info(f"[MONITOR] Full OpenVPN status log content:\n{content}")
+        logger.info(f"[MONITOR] Content length: {len(content)}")
 
         # Parse ROUTING_TABLE section to get Virtual Address mapped to Common Name
         # Format: Virtual Address,Common Name,Real Address,Last Ref
+        logger.info(f"[MONITOR] Searching for ROUTING_TABLE section...")
         routing_section_match = re.search(
             r"ROUTING_TABLE\s+(.*?)(?=GLOBAL STATS|END|$)",
             content,
@@ -108,21 +110,39 @@ def parse_openvpn_status_log() -> Dict[str, str]:
         )
 
         if routing_section_match:
-            routing_lines = routing_section_match.group(1).strip().split("\n")
-            for line in routing_lines:
+            routing_content = routing_section_match.group(1).strip()
+            logger.info(f"[MONITOR] Found ROUTING_TABLE section ({len(routing_content)} characters)")
+            logger.info(f"[MONITOR] ROUTING_TABLE content:\n{routing_content}")
+            
+            routing_lines = routing_content.split("\n")
+            logger.info(f"[MONITOR] Found {len(routing_lines)} lines in ROUTING_TABLE")
+            
+            for i, line in enumerate(routing_lines):
+                logger.debug(f"[MONITOR] Processing ROUTING_TABLE line {i}: {line}")
                 if not line.strip() or line.startswith("Virtual"):
+                    logger.debug(f"[MONITOR] Skipping line (empty or header): {line}")
                     continue
 
                 # Parse line: Virtual Address,Common Name,Real Address,Last Ref
                 parts = line.split(",")
+                logger.debug(f"[MONITOR] Split into {len(parts)} parts: {parts}")
                 if len(parts) >= 2:
                     virtual_ip = parts[0].strip()
                     username = parts[1].strip()
+                    logger.info(f"[MONITOR] Extracted - Username: '{username}', VPN IP: '{virtual_ip}'")
                     if username and virtual_ip:
                         username_to_ip[username] = virtual_ip
-                        logger.debug(f"Found router {username} with VPN IP {virtual_ip}")
+                        logger.info(f"[MONITOR] ✓ Found router {username} with VPN IP {virtual_ip}")
+                    else:
+                        logger.warning(f"[MONITOR] Skipping entry - username or IP is empty")
+                else:
+                    logger.warning(f"[MONITOR] Line has insufficient parts ({len(parts)} < 2): {line}")
+        else:
+            logger.warning(f"[MONITOR] ROUTING_TABLE section not found in content")
+            logger.debug(f"[MONITOR] Content preview:\n{content[:1000]}")
 
         # Also verify in CLIENT_LIST that the router is actually connected
+        logger.info(f"[MONITOR] Searching for CLIENT_LIST section...")
         client_section_match = re.search(
             r"CLIENT_LIST\s+(.*?)(?=ROUTING_TABLE|$)",
             content,
@@ -130,18 +150,32 @@ def parse_openvpn_status_log() -> Dict[str, str]:
         )
 
         if client_section_match:
+            client_content = client_section_match.group(1).strip()
+            logger.info(f"[MONITOR] Found CLIENT_LIST section ({len(client_content)} characters)")
+            logger.info(f"[MONITOR] CLIENT_LIST content:\n{client_content}")
+            
             connected_usernames = set()
-            client_lines = client_section_match.group(1).strip().split("\n")
-            for line in client_lines:
+            client_lines = client_content.split("\n")
+            logger.info(f"[MONITOR] Found {len(client_lines)} lines in CLIENT_LIST")
+            
+            for i, line in enumerate(client_lines):
+                logger.debug(f"[MONITOR] Processing CLIENT_LIST line {i}: {line}")
                 if not line.strip() or line.startswith("Common"):
+                    logger.debug(f"[MONITOR] Skipping CLIENT_LIST line (empty or header): {line}")
                     continue
 
                 # Parse line: Common Name,Real Address,Bytes Received,Bytes Sent,Connected Since
                 parts = line.split(",")
+                logger.debug(f"[MONITOR] CLIENT_LIST split into {len(parts)} parts: {parts}")
                 if len(parts) >= 1:
                     username = parts[0].strip()
                     if username:
                         connected_usernames.add(username)
+                        logger.info(f"[MONITOR] ✓ Found connected username in CLIENT_LIST: {username}")
+
+            logger.info(f"[MONITOR] Total connected usernames in CLIENT_LIST: {len(connected_usernames)}")
+            logger.info(f"[MONITOR] Connected usernames: {connected_usernames}")
+            logger.info(f"[MONITOR] Routers from ROUTING_TABLE before filtering: {username_to_ip}")
 
             # Only keep routers that are in both CLIENT_LIST and ROUTING_TABLE
             username_to_ip = {
@@ -149,6 +183,10 @@ def parse_openvpn_status_log() -> Dict[str, str]:
                 for username, ip in username_to_ip.items() 
                 if username in connected_usernames
             }
+            
+            logger.info(f"[MONITOR] Routers after filtering (in both sections): {username_to_ip}")
+        else:
+            logger.warning(f"[MONITOR] CLIENT_LIST section not found in content")
 
     except subprocess.TimeoutExpired:
         logger.error(f"Timeout reading OpenVPN status log via SSH")
