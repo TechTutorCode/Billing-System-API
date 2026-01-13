@@ -37,7 +37,15 @@ def list_package_types(db: Session = Depends(get_db)):
     """
     try:
         package_types = package_service.get_all_package_types(db=db)
-        return package_types
+        return [
+            PackageTypeResponse(
+                id=str(pt.id),
+                name=pt.name,
+                description=pt.description,
+                created_at=pt.created_at.isoformat() if pt.created_at else ""
+            )
+            for pt in package_types
+        ]
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
