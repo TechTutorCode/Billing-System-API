@@ -319,6 +319,7 @@ def update_router_statuses():
         logger.info(f"Found {len(routers)} active router(s) in database")
 
         if not routers:
+            print("[MONITOR] No active routers found, skipping status update")
             logger.info("No active routers found, skipping status update")
             return
 

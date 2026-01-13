@@ -96,29 +96,40 @@ async def startup_event():
     """Start background tasks on application startup."""
     import asyncio
     import logging
-    from app.routers.status_monitor import update_router_statuses
     
     logger = logging.getLogger(__name__)
+    print("=" * 80)
+    print("[STARTUP] Starting router status monitor background task...")
+    print("=" * 80)
     logger.info("Starting router status monitor background task...")
+    
+    from app.routers.status_monitor import update_router_statuses
     
     async def monitor_loop():
         """Background task to monitor router statuses."""
+        print("[MONITOR] Router status monitor loop started. Will run every 60 seconds.")
         logger.info("Router status monitor loop started. Will run every 60 seconds.")
         while True:
             try:
                 # Run in thread pool to avoid blocking
                 loop = asyncio.get_event_loop()
+                print("[MONITOR] Starting monitoring cycle...")
                 await loop.run_in_executor(None, update_router_statuses)
                 # Run every 60 seconds
+                print("[MONITOR] Monitoring cycle completed. Waiting 60 seconds before next check...")
                 logger.debug("Waiting 60 seconds before next status check...")
                 await asyncio.sleep(60)
             except Exception as e:
+                print(f"[MONITOR] ❌ Error in status monitor loop: {str(e)}")
                 logger.error(f"Error in status monitor loop: {str(e)}", exc_info=True)
+                print("[MONITOR] Waiting 60 seconds before retrying...")
                 logger.info("Waiting 60 seconds before retrying...")
                 await asyncio.sleep(60)
     
     # Start background task
     asyncio.create_task(monitor_loop())
+    print("[STARTUP] Router status monitor background task started successfully")
+    print("=" * 80)
     logger.info("Router status monitor background task started successfully")
 
 
