@@ -76,8 +76,13 @@ def parse_openvpn_status_log() -> Dict[str, str]:
         remote_command = f"cat {OPENVPN_STATUS_LOG}"
         ssh_cmd = _build_ssh_command(remote_command)
         
-        logger.info(f"[MONITOR] Executing SSH command to read OpenVPN status log: {OPENVPN_STATUS_LOG}")
-        logger.debug(f"[MONITOR] SSH command: {' '.join(ssh_cmd[:3])}... {ssh_cmd[-2]} 'cat {OPENVPN_STATUS_LOG}'")
+        logger.info(f"[MONITOR] ========================================")
+        logger.info(f"[MONITOR] EXECUTING SSH COMMAND TO READ FILE")
+        logger.info(f"[MONITOR] File: {OPENVPN_STATUS_LOG}")
+        logger.info(f"[MONITOR] Host: {settings.SSH_HOST}")
+        logger.info(f"[MONITOR] User: {settings.SSH_USER}")
+        logger.info(f"[MONITOR] Command: cat {OPENVPN_STATUS_LOG}")
+        logger.info(f"[MONITOR] ========================================")
         
         result = subprocess.run(
             ssh_cmd,
@@ -87,18 +92,28 @@ def parse_openvpn_status_log() -> Dict[str, str]:
             check=False
         )
         
-        logger.info(f"[MONITOR] SSH command return code: {result.returncode}")
+        logger.info(f"[MONITOR] SSH COMMAND COMPLETED")
+        logger.info(f"[MONITOR] Return Code: {result.returncode}")
+        logger.info(f"[MONITOR] stdout length: {len(result.stdout)} chars")
+        logger.info(f"[MONITOR] stderr length: {len(result.stderr)} chars")
+        
+        if result.stderr:
+            logger.warning(f"[MONITOR] SSH stderr output: {result.stderr}")
         
         if result.returncode != 0:
             error_msg = result.stderr.strip() if result.stderr else result.stdout.strip() or "Unknown error"
-            logger.error(f"[MONITOR] Failed to read OpenVPN status log via SSH (return code: {result.returncode})")
-            logger.error(f"[MONITOR] SSH error: {error_msg}")
+            logger.error(f"[MONITOR] ❌ SSH COMMAND FAILED (return code: {result.returncode})")
+            logger.error(f"[MONITOR] Error: {error_msg}")
+            logger.error(f"[MONITOR] stdout: {result.stdout}")
             return username_to_ip
         
         content = result.stdout
-        logger.info(f"[MONITOR] Successfully read OpenVPN status log ({len(content)} characters)")
-        logger.info(f"[MONITOR] Full OpenVPN status log content:\n{content}")
-        logger.info(f"[MONITOR] Content length: {len(content)}")
+        logger.info(f"[MONITOR] ✅ FILE READ SUCCESSFULLY")
+        logger.info(f"[MONITOR] Content length: {len(content)} characters")
+        logger.info(f"[MONITOR] ========================================")
+        logger.info(f"[MONITOR] RAW FILE CONTENT:")
+        logger.info(f"{content}")
+        logger.info(f"[MONITOR] ========================================")
 
         # Parse ROUTING TABLE section to get Virtual Address mapped to Common Name
         # Format: Virtual Address,Common Name,Real Address,Last Ref
