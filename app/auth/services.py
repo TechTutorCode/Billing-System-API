@@ -13,6 +13,7 @@ from app.email_verification.models import EmailVerification
 from app.isps.models import ISPDetails
 from app.otp.models import LoginOTP
 from app.auth.models import RefreshToken
+from app.auth.login_history_models import LoginHistory
 from app.auth.utils import hash_password, verify_password, generate_jwt_token, verify_jwt_token
 
 
@@ -354,6 +355,15 @@ class AuthService:
                 revoked=False
             )
             db.add(refresh_token)
+            
+            # Record login history
+            login_history = LoginHistory(
+                isp_id=isp.id,
+                ip_address=ip_address,
+                user_agent=user_agent
+            )
+            db.add(login_history)
+            
             db.commit()
         except ValueError as e:
             raise HTTPException(
@@ -454,6 +464,77 @@ class AuthService:
             )
 
         return isp, new_access_token
+
+    @staticmethod
+    def revoke_refresh_token(db: Session, refresh_token_str: str, isp_id: uuid.UUID) -> bool:
+        """
+        Revoke a specific refresh token.
+
+        Args:
+            db: Database session
+            refresh_token_str: Refresh token string to revoke
+            isp_id: ISP ID (for security check)
+
+        Returns:
+            True if token was revoked, False if not found
+
+        Raises:
+            HTTPException: If token doesn't belong to the ISP
+        """
+        # Find the refresh token
+        refresh_token = (
+            db.query(RefreshToken)
+            .filter(
+                RefreshToken.token == refresh_token_str,
+                RefreshToken.isp_id == isp_id,
+                RefreshToken.revoked == False
+            )
+            .first()
+        )
+
+        if not refresh_token:
+            return False
+
+        # Revoke the token
+        refresh_token.revoked = True
+        refresh_token.revoked_at = datetime.now(timezone.utc)
+        db.commit()
+
+        return True
+
+    @staticmethod
+    def revoke_all_refresh_tokens(db: Session, isp_id: uuid.UUID) -> int:
+        """
+        Revoke all refresh tokens for an ISP (logout from all devices).
+
+        Args:
+            db: Database session
+            isp_id: ISP ID
+
+        Returns:
+            Number of tokens revoked
+        """
+        # Find all active refresh tokens for this ISP
+        refresh_tokens = (
+            db.query(RefreshToken)
+            .filter(
+                RefreshToken.isp_id == isp_id,
+                RefreshToken.revoked == False
+            )
+            .all()
+        )
+
+        revoked_count = 0
+        now = datetime.now(timezone.utc)
+        for token in refresh_tokens:
+            token.revoked = True
+            token.revoked_at = now
+            revoked_count += 1
+
+        if revoked_count > 0:
+            db.commit()
+
+        return revoked_count
 
 
 # Global instance

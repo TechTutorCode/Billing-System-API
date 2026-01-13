@@ -174,3 +174,37 @@ class RefreshTokenResponse(BaseModel):
             }
         }
 
+
+class LogoutRequest(BaseModel):
+    """Schema for logout request."""
+
+    refresh_token: Optional[str] = Field(default=None, description="Specific refresh token to revoke. If not provided, revokes all tokens for the user.")
+    logout_all: bool = Field(default=False, description="If true, revokes all refresh tokens for the user (logout from all devices)")
+
+    class Config:
+        """Pydantic config."""
+
+        json_schema_extra = {
+            "example": {
+                "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                "logout_all": False
+            }
+        }
+
+
+class LogoutResponse(BaseModel):
+    """Schema for logout response."""
+
+    status_code: int = Field(..., description="HTTP status code")
+    message: str
+
+    class Config:
+        """Pydantic config."""
+
+        json_schema_extra = {
+            "example": {
+                "status_code": 200,
+                "message": "Logged out successfully"
+            }
+        }
+

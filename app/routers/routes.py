@@ -1,7 +1,7 @@
 """Router API routes."""
 
 import uuid
-from typing import Dict, List
+from typing import Dict, List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -305,15 +305,17 @@ def delete_router(
 def get_router_status_history(
     router_id: str,
     current_isp: ISPDetails = Depends(get_current_isp),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    limit: Optional[int] = Query(default=None, description="Maximum number of records to return. If not specified, returns all records.")
 ):
     """
     Get router status history.
 
     This endpoint:
-    - Returns all status history records for the specified router
+    - Returns status history records for the specified router
     - Only accessible by router owner (ISP)
-    - Returns all records ordered by most recent first
+    - If limit is specified, returns that many records (most recent first)
+    - If limit is not specified, returns all records
     """
     try:
         router_uuid = UUID(router_id)
@@ -335,13 +337,18 @@ def get_router_status_history(
                 detail="Router not found"
             )
 
-        # Get status history (all records, no limit)
-        history_records = (
+        # Get status history
+        query = (
             db.query(RouterStatusHistory)
             .filter(RouterStatusHistory.router_id == router_uuid)
             .order_by(RouterStatusHistory.recorded_at.desc())
-            .all()
         )
+        
+        # Apply limit if specified
+        if limit is not None:
+            query = query.limit(limit)
+        
+        history_records = query.all()
 
         history_responses = [
             RouterStatusHistoryResponse(

@@ -1,6 +1,6 @@
 """Authentication API routes."""
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
 from app.auth.schemas import (
@@ -13,9 +13,13 @@ from app.auth.schemas import (
     ISPRegisterResponse,
     RefreshTokenRequest,
     RefreshTokenResponse,
+    LogoutRequest,
+    LogoutResponse,
 )
+from app.auth.dependencies import get_current_isp
 from app.auth.services import auth_service
 from app.database import get_db
+from app.isps.models import ISPDetails
 
 router = APIRouter(prefix="/api/auth", tags=["authentication"])
 
@@ -147,6 +151,7 @@ async def login(
 )
 def verify_login_otp(
     request: ISPLoginOTPRequest,
+    http_request: Request,
     db: Session = Depends(get_db)
 ):
     """
@@ -160,10 +165,16 @@ def verify_login_otp(
     - Generates and returns JWT access token on success
     """
     try:
+        # Extract IP address and user agent from request
+        ip_address = http_request.client.host if http_request else None
+        user_agent = http_request.headers.get("user-agent") if http_request else None
+        
         isp, access_token, refresh_token = auth_service.verify_login_otp(
             db=db,
             session_id=request.session_id,
-            otp=request.otp
+            otp=request.otp,
+            ip_address=ip_address,
+            user_agent=user_agent
         )
         return ISPLoginOTPResponse(
             status_code=status.HTTP_200_OK,
@@ -218,5 +229,62 @@ def refresh_token(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Token refresh failed: {str(e)}"
+        )
+
+
+@router.post(
+    "/logout",
+    response_model=LogoutResponse,
+    summary="Logout",
+    description="Logout by revoking refresh token(s). Can revoke a specific token or all tokens for the user."
+)
+def logout(
+    request: LogoutRequest,
+    current_isp: ISPDetails = Depends(get_current_isp),
+    db: Session = Depends(get_db)
+):
+    """
+    Logout ISP by revoking refresh token(s).
+
+    This endpoint:
+    - Requires valid JWT access token (authenticated user)
+    - If logout_all=True, revokes all refresh tokens for the user (logout from all devices)
+    - If refresh_token is provided, revokes only that specific token
+    - If neither is provided, revokes all tokens (default behavior)
+    """
+    try:
+        if request.logout_all or not request.refresh_token:
+            # Revoke all refresh tokens for this ISP
+            revoked_count = auth_service.revoke_all_refresh_tokens(
+                db=db,
+                isp_id=current_isp.id
+            )
+            return LogoutResponse(
+                status_code=status.HTTP_200_OK,
+                message=f"Logged out successfully. {revoked_count} token(s) revoked."
+            )
+        else:
+            # Revoke specific refresh token
+            revoked = auth_service.revoke_refresh_token(
+                db=db,
+                refresh_token_str=request.refresh_token,
+                isp_id=current_isp.id
+            )
+            if revoked:
+                return LogoutResponse(
+                    status_code=status.HTTP_200_OK,
+                    message="Logged out successfully. Refresh token revoked."
+                )
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Refresh token not found or already revoked"
+                )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Logout failed: {str(e)}"
         )
 
