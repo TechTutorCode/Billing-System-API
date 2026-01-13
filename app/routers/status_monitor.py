@@ -6,6 +6,7 @@ import subprocess
 from datetime import datetime, timezone
 from typing import Dict, Optional, Tuple
 
+from dateutil import parser as date_parser
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -435,15 +436,21 @@ def update_router_statuses():
                 # Parse Connected Since timestamp if available
                 connected_since_dt = None
                 if connected_since_str:
-                    try:
-                        # OpenVPN format: "Mon Jan  1 12:00:00 2024" or "2024-01-01 12:00:00"
-                        # Try parsing common OpenVPN timestamp formats
-                        from dateutil import parser as date_parser
-                        connected_since_dt = date_parser.parse(connected_since_str)
-                        logger.debug(f"  → Parsed Connected Since: {connected_since_dt}")
-                    except Exception as e:
-                        logger.warning(f"  → Failed to parse Connected Since '{connected_since_str}': {str(e)}")
-                        connected_since_dt = None
+                    cleaned_str = connected_since_str.strip()
+                    # Skip invalid values like '0' which indicate no connection time
+                    if cleaned_str and cleaned_str != '0':
+                        try:
+                            # OpenVPN format: "Mon Jan  1 12:00:00 2024" or "2024-01-01 12:00:00"
+                            # Try parsing common OpenVPN timestamp formats
+                            connected_since_dt = date_parser.parse(cleaned_str)
+                            logger.debug(f"  → Parsed Connected Since: {connected_since_dt}")
+                        except Exception as e:
+                            logger.warning(f"  → Failed to parse Connected Since '{connected_since_str}': {str(e)}")
+                            connected_since_dt = None
+                    else:
+                        logger.debug(f"  → Connected Since is '0' or empty, skipping parse")
+                else:
+                    logger.debug(f"  → Connected Since not available, setting to None")
 
                 # Record status history for this cycle
                 # Refresh router to get latest status and vpn_ip
