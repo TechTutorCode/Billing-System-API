@@ -305,16 +305,15 @@ def delete_router(
 def get_router_status_history(
     router_id: str,
     current_isp: ISPDetails = Depends(get_current_isp),
-    db: Session = Depends(get_db),
-    limit: int = Query(default=100, ge=1, le=1000, description="Maximum number of records to return")
+    db: Session = Depends(get_db)
 ):
     """
     Get router status history.
 
     This endpoint:
-    - Returns status history records for the specified router
+    - Returns all status history records for the specified router
     - Only accessible by router owner (ISP)
-    - Limited to most recent records (default 100, max 1000)
+    - Returns all records ordered by most recent first
     """
     try:
         router_uuid = UUID(router_id)
@@ -336,12 +335,11 @@ def get_router_status_history(
                 detail="Router not found"
             )
 
-        # Get status history
+        # Get status history (all records, no limit)
         history_records = (
             db.query(RouterStatusHistory)
             .filter(RouterStatusHistory.router_id == router_uuid)
             .order_by(RouterStatusHistory.recorded_at.desc())
-            .limit(limit)
             .all()
         )
 
