@@ -76,7 +76,9 @@ def parse_openvpn_status_log() -> Dict[str, str]:
         remote_command = f"cat {OPENVPN_STATUS_LOG}"
         ssh_cmd = _build_ssh_command(remote_command)
         
-        logger.debug(f"Reading OpenVPN status log from host via SSH: {OPENVPN_STATUS_LOG}")
+        logger.info(f"[MONITOR] Executing SSH command to read OpenVPN status log: {OPENVPN_STATUS_LOG}")
+        logger.debug(f"[MONITOR] SSH command: {' '.join(ssh_cmd[:3])}... {ssh_cmd[-2]} 'cat {OPENVPN_STATUS_LOG}'")
+        
         result = subprocess.run(
             ssh_cmd,
             capture_output=True,
@@ -85,12 +87,17 @@ def parse_openvpn_status_log() -> Dict[str, str]:
             check=False
         )
         
+        logger.info(f"[MONITOR] SSH command return code: {result.returncode}")
+        
         if result.returncode != 0:
             error_msg = result.stderr.strip() if result.stderr else result.stdout.strip() or "Unknown error"
-            logger.warning(f"Failed to read OpenVPN status log via SSH: {error_msg}")
+            logger.error(f"[MONITOR] Failed to read OpenVPN status log via SSH (return code: {result.returncode})")
+            logger.error(f"[MONITOR] SSH error: {error_msg}")
             return username_to_ip
         
         content = result.stdout
+        logger.info(f"[MONITOR] Successfully read OpenVPN status log ({len(content)} characters)")
+        logger.debug(f"[MONITOR] OpenVPN status log content (first 500 chars):\n{content[:500]}...")
 
         # Parse ROUTING_TABLE section to get Virtual Address mapped to Common Name
         # Format: Virtual Address,Common Name,Real Address,Last Ref
@@ -160,27 +167,43 @@ def update_router_statuses():
     """
     Background task to update router statuses based on OpenVPN log and API tests.
     """
+    logger.info("=" * 60)
+    logger.info("Starting router status monitoring cycle")
+    logger.info("=" * 60)
+    
     db: Session = SessionLocal()
     try:
         # Get all active routers
         routers = db.query(Router).filter(Router.is_active == True).all()
+        logger.info(f"Found {len(routers)} active router(s) in database")
 
         if not routers:
+            logger.info("No active routers found, skipping status update")
             return
 
         # Parse OpenVPN status log
+        logger.info(f"Reading OpenVPN status log from host: {OPENVPN_STATUS_LOG}")
         username_to_ip = parse_openvpn_status_log()
         
-        logger.info(f"Parsed {len(username_to_ip)} routers from OpenVPN status log: {username_to_ip}")
+        logger.info(f"Parsed {len(username_to_ip)} router(s) from OpenVPN status log")
+        if username_to_ip:
+            logger.info(f"Connected routers: {username_to_ip}")
+        else:
+            logger.warning("No routers found in OpenVPN status log")
 
         for router in routers:
             try:
+                logger.info(f"Processing router: {router.vpn_username} (ID: {router.id})")
+                logger.info(f"  Current status: {router.status}")
+                logger.info(f"  Current VPN IP: {router.vpn_ip}")
+                
                 vpn_ip = username_to_ip.get(router.vpn_username)
-                logger.debug(f"Checking router {router.vpn_username} (current status: {router.status}, current VPN IP: {router.vpn_ip})")
 
                 if vpn_ip:
+                    logger.info(f"  ✓ Router found in VPN log with IP: {vpn_ip}")
                     # Router is connected to VPN
                     if router.vpn_ip != vpn_ip:
+                        logger.info(f"  → Updating VPN IP from {router.vpn_ip} to {vpn_ip}")
                         # Update VPN IP
                         router_service.update_router_status(
                             db=db,
@@ -188,37 +211,57 @@ def update_router_statuses():
                             vpn_ip=vpn_ip,
                             status=RouterStatus.VPN_CONNECTED
                         )
+                        logger.info(f"  → Status updated to: VPN_CONNECTED")
 
                     # Test MikroTik API connection (use the newly parsed vpn_ip)
+                    logger.info(f"  → Testing MikroTik API connection at {vpn_ip}:{router.api_port}")
                     if mikrotik_service.test_api_connection(vpn_ip, router.api_port):
+                        logger.info(f"  ✓ MikroTik API is accessible")
                         # API is accessible, router is online
-                        router_service.update_router_status(
-                            db=db,
-                            router=router,
-                            status=RouterStatus.ONLINE
-                        )
+                        if router.status != RouterStatus.ONLINE.value:
+                            logger.info(f"  → Updating status from {router.status} to ONLINE")
+                            router_service.update_router_status(
+                                db=db,
+                                router=router,
+                                status=RouterStatus.ONLINE
+                            )
+                        else:
+                            logger.info(f"  → Status already ONLINE, no update needed")
                     else:
+                        logger.info(f"  ✗ MikroTik API not accessible")
                         # VPN connected but API not accessible
-                        router_service.update_router_status(
-                            db=db,
-                            router=router,
-                            status=RouterStatus.VPN_CONNECTED
-                        )
+                        if router.status != RouterStatus.VPN_CONNECTED.value:
+                            logger.info(f"  → Updating status from {router.status} to VPN_CONNECTED")
+                            router_service.update_router_status(
+                                db=db,
+                                router=router,
+                                status=RouterStatus.VPN_CONNECTED
+                            )
+                        else:
+                            logger.info(f"  → Status already VPN_CONNECTED, no update needed")
                 else:
+                    logger.info(f"  ✗ Router NOT found in VPN log")
                     # Router not in VPN log, mark as offline
                     if router.status != RouterStatus.PENDING.value:
+                        logger.info(f"  → Updating status from {router.status} to OFFLINE")
                         router_service.update_router_status(
                             db=db,
                             router=router,
                             status=RouterStatus.OFFLINE
                         )
+                    else:
+                        logger.info(f"  → Router is still PENDING, keeping status as is")
 
             except Exception as e:
-                logger.error(f"Error updating status for router {router.id}: {str(e)}")
+                logger.error(f"Error updating status for router {router.id}: {str(e)}", exc_info=True)
                 continue
+        
+        logger.info("=" * 60)
+        logger.info("Router status monitoring cycle completed")
+        logger.info("=" * 60)
 
     except Exception as e:
-        logger.error(f"Error in router status monitor: {str(e)}")
+        logger.error(f"Error in router status monitor: {str(e)}", exc_info=True)
     finally:
         db.close()
 
