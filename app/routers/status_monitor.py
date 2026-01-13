@@ -282,13 +282,14 @@ def parse_openvpn_status_log() -> Dict[str, Tuple[str, Optional[str]]]:
             logger.info(f"[MONITOR] Routers from ROUTING TABLE before filtering: {username_to_ip}")
 
             # Only keep routers that are in both CLIENT LIST and ROUTING TABLE
+            # Build result dict with tuples (vpn_ip, connected_since)
             username_to_ip = {
-                username: ip 
+                username: (ip, username_to_connected_since.get(username))
                 for username, ip in username_to_ip.items() 
                 if username in connected_usernames
             }
             
-            logger.info(f"[MONITOR] Routers after filtering (in both sections): {username_to_ip}")
+            logger.info(f"[MONITOR] Routers after filtering (in both sections): {list(username_to_ip.keys())}")
         else:
             logger.error(f"[MONITOR] ❌ OpenVPN CLIENT LIST section not found in content")
             print(f"\n[MONITOR] ❌ OpenVPN CLIENT LIST section not found!")
@@ -308,7 +309,22 @@ def parse_openvpn_status_log() -> Dict[str, Tuple[str, Optional[str]]]:
     except Exception as e:
         logger.error(f"Error parsing OpenVPN status log: {str(e)}")
 
-    return username_to_ip
+    # Convert username_to_ip from Dict[str, str] to Dict[str, Tuple[str, Optional[str]]]
+    # This handles the case where CLIENT LIST was not found but ROUTING TABLE had entries
+    if username_to_ip:
+        # Check if values are strings (need conversion) or tuples (already converted)
+        first_value = next(iter(username_to_ip.values()))
+        if isinstance(first_value, str):
+            # Need to convert to tuple format
+            result: Dict[str, Tuple[str, Optional[str]]] = {
+                username: (ip, username_to_connected_since.get(username))
+                for username, ip in username_to_ip.items()
+            }
+            logger.info(f"[MONITOR] Converted to tuple format: {len(result)} routers")
+            return result
+    
+    # If already in tuple format or empty, return as is
+    return username_to_ip if username_to_ip else {}
 
 
 def update_router_statuses():
