@@ -263,7 +263,13 @@ class AuthService:
         return session_id, isp.id
 
     @staticmethod
-    def verify_login_otp(db: Session, session_id: str, otp: str) -> tuple[ISPDetails, str]:
+    def verify_login_otp(
+        db: Session,
+        session_id: str,
+        otp: str,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None
+    ) -> tuple[ISPDetails, str, str]:
         """
         Verify login OTP and return JWT token.
 
@@ -271,9 +277,11 @@ class AuthService:
             db: Database session
             session_id: Session ID from login initiation
             otp: 6-digit OTP code
+            ip_address: Client IP address (optional)
+            user_agent: Client user agent (optional)
 
         Returns:
-            Tuple of (ISP details, JWT token)
+            Tuple of (ISP details, access token, refresh token)
 
         Raises:
             HTTPException: If OTP is invalid, expired, or max attempts exceeded
