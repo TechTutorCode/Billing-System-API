@@ -77,11 +77,23 @@ def parse_openvpn_status_log() -> Dict[str, str]:
 
     try:
         # Read OpenVPN status log from host machine via SSH
-        # First check if file exists, then read it
-        remote_command = f"if [ -f {OPENVPN_STATUS_LOG} ]; then cat {OPENVPN_STATUS_LOG}; else echo 'ERROR: File not found at {OPENVPN_STATUS_LOG}'; ls -la {OPENVPN_STATUS_LOG} 2>&1; fi"
+        # Test SSH connection first
+        test_cmd = _build_ssh_command("echo 'SSH_TEST_SUCCESS'")
+        test_result = subprocess.run(test_cmd, capture_output=True, text=True, timeout=10, check=False)
+        logger.info(f"[MONITOR] SSH connection test - Return code: {test_result.returncode}, Output: {test_result.stdout.strip()}")
+        print(f"[MONITOR] SSH test: {test_result.stdout.strip()}")
+        
+        if test_result.returncode != 0:
+            logger.error(f"[MONITOR] ❌ SSH connection test failed!")
+            print(f"[MONITOR] ❌ SSH connection test failed: {test_result.stderr}")
+            return username_to_ip
+        
+        # Use sudo to read the file (it's in /var/log/ which may require root)
+        remote_command = f"sudo cat {OPENVPN_STATUS_LOG} 2>&1"
         ssh_cmd = _build_ssh_command(remote_command)
         logger.info(f"[MONITOR] Full SSH command: {' '.join(ssh_cmd[:5])}... {ssh_cmd[-2]} '<command>'")
-        print(f"[MONITOR] Executing: {' '.join(ssh_cmd[:3])}... {ssh_cmd[-2]} '<command>'")
+        print(f"[MONITOR] Executing SSH to read: {OPENVPN_STATUS_LOG}")
+        print(f"[MONITOR] SSH Host: {settings.SSH_HOST}, User: {settings.SSH_USER}")
         
         logger.info(f"[MONITOR] ========================================")
         logger.info(f"[MONITOR] EXECUTING SSH COMMAND TO READ FILE")
@@ -119,21 +131,49 @@ def parse_openvpn_status_log() -> Dict[str, str]:
         logger.info(f"[MONITOR] Content length: {len(content)} characters")
         logger.info(f"[MONITOR] ========================================")
         logger.info(f"[MONITOR] RAW FILE CONTENT (PRINTING FULL CONTENT):")
-        print(f"[MONITOR] RAW CONTENT:\n{content}")  # Use print to ensure it shows
+        print(f"\n[MONITOR] ========== RAW CONTENT FROM SSH ==========")
+        print(f"[MONITOR] Content length: {len(content)}")
+        print(f"[MONITOR] Content:\n{content}")
+        print(f"[MONITOR] ===========================================\n")
         logger.info(f"[MONITOR] RAW CONTENT:\n{content}")
         logger.info(f"[MONITOR] ========================================")
         
-        # Check if content is empty or file not found
+        # Check if content is empty or contains error
         if not content or len(content.strip()) == 0:
             logger.error(f"[MONITOR] ❌ CONTENT IS EMPTY! SSH returned no data!")
             print(f"[MONITOR] ❌ CONTENT IS EMPTY!")
-            # Try to check if file exists
-            check_cmd = _build_ssh_command(f"ls -la {OPENVPN_STATUS_LOG} 2>&1")
+            print(f"[MONITOR] SSH return code was: {result.returncode}")
+            print(f"[MONITOR] SSH stderr: {result.stderr}")
+            # Try to check if file exists with proper path
+            check_cmd = _build_ssh_command(f"test -f {OPENVPN_STATUS_LOG} && echo 'FILE_EXISTS' || (echo 'FILE_NOT_FOUND' && ls -la /var/log/ | grep -i openvpn)")
             check_result = subprocess.run(check_cmd, capture_output=True, text=True, timeout=10, check=False)
-            logger.error(f"[MONITOR] File check return code: {check_result.returncode}")
-            logger.error(f"[MONITOR] File check output: {check_result.stdout}")
-            logger.error(f"[MONITOR] File check error: {check_result.stderr}")
-            print(f"[MONITOR] File check: {check_result.stdout}")
+            logger.error(f"[MONITOR] File existence check return code: {check_result.returncode}")
+            logger.error(f"[MONITOR] File existence check output: {check_result.stdout}")
+            logger.error(f"[MONITOR] File existence check error: {check_result.stderr}")
+            print(f"[MONITOR] File check result: {check_result.stdout}")
+            print(f"[MONITOR] File check stderr: {check_result.stderr}")
+            
+            # Also try to see what's in /var/log/ and check the actual file
+            list_cmd = _build_ssh_command(f"ls -la /var/log/ | grep -i openvpn")
+            list_result = subprocess.run(list_cmd, capture_output=True, text=True, timeout=10, check=False)
+            print(f"[MONITOR] /var/log/ openvpn files: {list_result.stdout}")
+            
+            # Try reading with sudo in case of permissions
+            sudo_cmd = _build_ssh_command(f"sudo cat {OPENVPN_STATUS_LOG} 2>&1")
+            sudo_result = subprocess.run(sudo_cmd, capture_output=True, text=True, timeout=10, check=False)
+            print(f"[MONITOR] Sudo cat result (return code {sudo_result.returncode}): {sudo_result.stdout[:200] if sudo_result.stdout else 'EMPTY'}")
+            if sudo_result.stdout and len(sudo_result.stdout.strip()) > 0:
+                logger.info(f"[MONITOR] ✅ Got content with sudo! Using it...")
+                content = sudo_result.stdout
+                # Continue with parsing instead of returning
+            else:
+                logger.error(f"[MONITOR] Sudo also returned empty: {sudo_result.stderr}")
+                return username_to_ip
+        
+        # Check if file was not found (error message in content)
+        if "No such file" in content or "cannot access" in content.lower() or "Permission denied" in content:
+            logger.error(f"[MONITOR] ❌ FILE ERROR: {content}")
+            print(f"[MONITOR] ❌ FILE ERROR: {content}")
             return username_to_ip
         
         # Check if file was not found
