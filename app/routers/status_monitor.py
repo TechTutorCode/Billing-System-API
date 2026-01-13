@@ -516,8 +516,8 @@ def start_status_monitor():
         while True:
             try:
                 update_router_statuses()
-                # Run every 60 seconds
-                await asyncio.sleep(60)
+                # Run every 20 seconds
+                await asyncio.sleep(20)
             except Exception as e:
                 logger.error(f"Error in status monitor loop: {str(e)}")
                 await asyncio.sleep(60)
