@@ -120,7 +120,7 @@ def create_package(
     "/routers/{router_id}/packages",
     response_model=List[PackageResponse],
     summary="List Packages by Router",
-    description="Get list of all active packages for a specific router."
+    description="Get list of all packages (active and inactive) for a specific router."
 )
 def list_packages_by_router(
     router_id: str,
@@ -131,7 +131,7 @@ def list_packages_by_router(
     List packages for a specific router.
 
     This endpoint:
-    - Returns all active packages for the router
+    - Returns all packages (active and inactive) for the router
     - Requires valid JWT access token
     - Validates router ownership
     """
@@ -141,7 +141,7 @@ def list_packages_by_router(
             db=db,
             router_id=router_uuid,
             isp_id=current_isp.id,
-            active_only=True
+            active_only=False
         )
 
         package_responses = []
