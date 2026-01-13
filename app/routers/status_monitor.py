@@ -343,10 +343,10 @@ def update_router_statuses():
 
                 if vpn_ip:
                     logger.info(f"  ✓ Router found in VPN log with IP: {vpn_ip}")
-                    # Router is connected to VPN
+                    # Router is connected to VPN - always update last_seen to current time
                     if router.vpn_ip != vpn_ip:
                         logger.info(f"  → Updating VPN IP from {router.vpn_ip} to {vpn_ip}")
-                        # Update VPN IP
+                        # Update VPN IP and last_seen
                         router_service.update_router_status(
                             db=db,
                             router=router,
@@ -354,12 +354,20 @@ def update_router_statuses():
                             status=RouterStatus.VPN_CONNECTED
                         )
                         logger.info(f"  → Status updated to: VPN_CONNECTED")
+                    else:
+                        # VPN IP hasn't changed, but router is still connected - update last_seen
+                        logger.info(f"  → Router still connected, updating last_seen timestamp")
+                        router_service.update_router_status(
+                            db=db,
+                            router=router,
+                            update_last_seen=True
+                        )
 
                     # Test MikroTik API connection (use the newly parsed vpn_ip)
                     logger.info(f"  → Testing MikroTik API connection at {vpn_ip}:{router.api_port}")
                     if mikrotik_service.test_api_connection(vpn_ip, router.api_port):
                         logger.info(f"  ✓ MikroTik API is accessible")
-                        # API is accessible, router is online
+                        # API is accessible, router is online - update last_seen
                         if router.status != RouterStatus.ONLINE.value:
                             logger.info(f"  → Updating status from {router.status} to ONLINE")
                             router_service.update_router_status(
@@ -368,7 +376,13 @@ def update_router_statuses():
                                 status=RouterStatus.ONLINE
                             )
                         else:
-                            logger.info(f"  → Status already ONLINE, no update needed")
+                            # Status already ONLINE, but still update last_seen
+                            logger.info(f"  → Status already ONLINE, updating last_seen timestamp")
+                            router_service.update_router_status(
+                                db=db,
+                                router=router,
+                                update_last_seen=True
+                            )
                     else:
                         logger.info(f"  ✗ MikroTik API not accessible")
                         # VPN connected but API not accessible
@@ -380,7 +394,13 @@ def update_router_statuses():
                                 status=RouterStatus.VPN_CONNECTED
                             )
                         else:
-                            logger.info(f"  → Status already VPN_CONNECTED, no update needed")
+                            # Status already VPN_CONNECTED, but still update last_seen
+                            logger.info(f"  → Status already VPN_CONNECTED, updating last_seen timestamp")
+                            router_service.update_router_status(
+                                db=db,
+                                router=router,
+                                update_last_seen=True
+                            )
                 else:
                     logger.info(f"  ✗ Router NOT found in VPN log")
                     # Router not in VPN log, mark as offline

@@ -158,7 +158,8 @@ class RouterService:
         db: Session,
         router: Router,
         vpn_ip: Optional[str] = None,
-        status: Optional[RouterStatus] = None
+        status: Optional[RouterStatus] = None,
+        update_last_seen: bool = True
     ) -> Router:
         """
         Update router status and VPN IP.
@@ -178,8 +179,10 @@ class RouterService:
         if status is not None:
             router.status = status.value
 
-        from datetime import datetime, timezone
-        router.last_seen = datetime.now(timezone.utc)
+        # Always update last_seen to current time when router is detected
+        if update_last_seen:
+            from datetime import datetime, timezone
+            router.last_seen = datetime.now(timezone.utc)
 
         db.commit()
         db.refresh(router)
