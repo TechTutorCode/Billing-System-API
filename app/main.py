@@ -8,6 +8,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.auth.routes import router as auth_router
 from app.isps.routes import router as isp_router
 from app.routers.routes import router as router_router
+from app.packages.router import router as package_router
 from app.config import get_settings
 from app.database import Base, engine
 
@@ -19,6 +20,7 @@ from app.auth import models as auth_models  # noqa: F401
 from app.auth import login_history_models  # noqa: F401
 from app.routers import models as router_models  # noqa: F401
 from app.routers import status_history_models  # noqa: F401
+from app.packages import models as package_models  # noqa: F401
 
 settings = get_settings()
 
@@ -90,6 +92,7 @@ async def general_exception_handler(request: Request, exc: Exception):
 app.include_router(auth_router)
 app.include_router(isp_router)
 app.include_router(router_router)
+app.include_router(package_router)
 
 
 # Start router status monitor background task
@@ -99,11 +102,26 @@ async def startup_event():
     import asyncio
     import logging
     
+    from app.database import SessionLocal
+    from app.packages.service import package_service
+    
     logger = logging.getLogger(__name__)
     print("=" * 80)
-    print("[STARTUP] Starting router status monitor background task...")
+    print("[STARTUP] Starting application startup tasks...")
     print("=" * 80)
-    logger.info("Starting router status monitor background task...")
+    logger.info("Starting application startup tasks...")
+    
+    # Seed package types
+    db = SessionLocal()
+    try:
+        package_service.seed_package_types(db=db)
+        logger.info("Package types seeded successfully")
+        print("[STARTUP] Package types seeded successfully")
+    except Exception as e:
+        logger.error(f"Failed to seed package types: {str(e)}")
+        print(f"[STARTUP] Warning: Failed to seed package types: {str(e)}")
+    finally:
+        db.close()
     
     from app.routers.status_monitor import update_router_statuses
     
