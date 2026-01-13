@@ -77,8 +77,11 @@ def parse_openvpn_status_log() -> Dict[str, str]:
 
     try:
         # Read OpenVPN status log from host machine via SSH
-        remote_command = f"cat {OPENVPN_STATUS_LOG}"
+        # First check if file exists, then read it
+        remote_command = f"if [ -f {OPENVPN_STATUS_LOG} ]; then cat {OPENVPN_STATUS_LOG}; else echo 'ERROR: File not found at {OPENVPN_STATUS_LOG}'; ls -la {OPENVPN_STATUS_LOG} 2>&1; fi"
         ssh_cmd = _build_ssh_command(remote_command)
+        logger.info(f"[MONITOR] Full SSH command: {' '.join(ssh_cmd[:5])}... {ssh_cmd[-2]} '<command>'")
+        print(f"[MONITOR] Executing: {' '.join(ssh_cmd[:3])}... {ssh_cmd[-2]} '<command>'")
         
         logger.info(f"[MONITOR] ========================================")
         logger.info(f"[MONITOR] EXECUTING SSH COMMAND TO READ FILE")
@@ -112,7 +115,7 @@ def parse_openvpn_status_log() -> Dict[str, str]:
             return username_to_ip
         
         content = result.stdout
-        logger.info(f"[MONITOR] ✅ FILE READ SUCCESSFULLY")
+        logger.info(f"[MONITOR] ✅ SSH COMMAND EXECUTED")
         logger.info(f"[MONITOR] Content length: {len(content)} characters")
         logger.info(f"[MONITOR] ========================================")
         logger.info(f"[MONITOR] RAW FILE CONTENT (PRINTING FULL CONTENT):")
@@ -120,9 +123,23 @@ def parse_openvpn_status_log() -> Dict[str, str]:
         logger.info(f"[MONITOR] RAW CONTENT:\n{content}")
         logger.info(f"[MONITOR] ========================================")
         
-        # Check if content is empty
+        # Check if content is empty or file not found
         if not content or len(content.strip()) == 0:
             logger.error(f"[MONITOR] ❌ CONTENT IS EMPTY! SSH returned no data!")
+            print(f"[MONITOR] ❌ CONTENT IS EMPTY!")
+            # Try to check if file exists
+            check_cmd = _build_ssh_command(f"ls -la {OPENVPN_STATUS_LOG} 2>&1")
+            check_result = subprocess.run(check_cmd, capture_output=True, text=True, timeout=10, check=False)
+            logger.error(f"[MONITOR] File check return code: {check_result.returncode}")
+            logger.error(f"[MONITOR] File check output: {check_result.stdout}")
+            logger.error(f"[MONITOR] File check error: {check_result.stderr}")
+            print(f"[MONITOR] File check: {check_result.stdout}")
+            return username_to_ip
+        
+        # Check if file was not found
+        if "FILE_NOT_FOUND" in content:
+            logger.error(f"[MONITOR] ❌ FILE NOT FOUND at {OPENVPN_STATUS_LOG}")
+            print(f"[MONITOR] ❌ FILE NOT FOUND at {OPENVPN_STATUS_LOG}")
             return username_to_ip
 
         # Parse ROUTING TABLE section to get Virtual Address mapped to Common Name
