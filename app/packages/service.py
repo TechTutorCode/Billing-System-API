@@ -277,6 +277,35 @@ class PackageService:
 
         return package
 
+    @staticmethod
+    def enable_package(
+        db: Session,
+        package_id: UUID,
+        isp_id: UUID
+    ) -> ServicePackage:
+        """
+        Enable a service package.
+
+        Args:
+            db: Database session
+            package_id: Package ID
+            isp_id: ISP ID (for ownership verification)
+
+        Returns:
+            Updated ServicePackage instance
+
+        Raises:
+            HTTPException: If package not found
+        """
+        package = PackageService.get_package_by_id(db, package_id, isp_id)
+
+        package.is_active = True
+        package.updated_at = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(package)
+
+        return package
+
 
 # Global instance
 package_service = PackageService()

@@ -321,3 +321,69 @@ def disable_package(
             detail=f"Failed to disable package: {str(e)}"
         )
 
+
+@router.patch(
+    "/packages/{package_id}/enable",
+    response_model=PackageResponse,
+    summary="Enable Package",
+    description="Enable a disabled service package."
+)
+def enable_package(
+    package_id: str,
+    current_isp: ISPDetails = Depends(get_current_isp),
+    db: Session = Depends(get_db)
+):
+    """
+    Enable a service package.
+
+    This endpoint:
+    - Sets is_active=True
+    - Requires valid JWT access token
+    - Validates package ownership
+    """
+    try:
+        package_uuid = UUID(package_id)
+        package = package_service.enable_package(
+            db=db,
+            package_id=package_uuid,
+            isp_id=current_isp.id
+        )
+
+        # Load package type relationship
+        db.refresh(package)
+
+        return PackageResponse(
+            id=str(package.id),
+            name=package.name,
+            download_speed=package.download_speed,
+            upload_speed=package.upload_speed,
+            price=str(package.price),
+            validity_value=package.validity_value,
+            validity_unit=package.validity_unit,
+            data_limit_gb=package.data_limit_gb,
+            router_id=str(package.router_id),
+            package_type_id=str(package.package_type_id),
+            package_type=PackageTypeResponse(
+                id=str(package.package_type.id),
+                name=package.package_type.name,
+                description=package.package_type.description,
+                created_at=package.package_type.created_at.isoformat()
+            ),
+            mikrotik_profile=package.mikrotik_profile,
+            is_active=package.is_active,
+            created_at=package.created_at.isoformat(),
+            updated_at=package.updated_at.isoformat()
+        )
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid package ID format"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to enable package: {str(e)}"
+        )
+
