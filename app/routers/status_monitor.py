@@ -69,6 +69,10 @@ def parse_openvpn_status_log() -> Dict[str, str]:
     Returns:
         Dictionary mapping vpn_username to vpn_ip
     """
+    logger.info("=" * 80)
+    logger.info("[MONITOR] parse_openvpn_status_log() CALLED")
+    logger.info("=" * 80)
+    
     username_to_ip: Dict[str, str] = {}
 
     try:
@@ -111,9 +115,15 @@ def parse_openvpn_status_log() -> Dict[str, str]:
         logger.info(f"[MONITOR] ✅ FILE READ SUCCESSFULLY")
         logger.info(f"[MONITOR] Content length: {len(content)} characters")
         logger.info(f"[MONITOR] ========================================")
-        logger.info(f"[MONITOR] RAW FILE CONTENT:")
-        logger.info(f"{content}")
+        logger.info(f"[MONITOR] RAW FILE CONTENT (PRINTING FULL CONTENT):")
+        print(f"[MONITOR] RAW CONTENT:\n{content}")  # Use print to ensure it shows
+        logger.info(f"[MONITOR] RAW CONTENT:\n{content}")
         logger.info(f"[MONITOR] ========================================")
+        
+        # Check if content is empty
+        if not content or len(content.strip()) == 0:
+            logger.error(f"[MONITOR] ❌ CONTENT IS EMPTY! SSH returned no data!")
+            return username_to_ip
 
         # Parse ROUTING TABLE section to get Virtual Address mapped to Common Name
         # Format: Virtual Address,Common Name,Real Address,Last Ref
@@ -154,8 +164,15 @@ def parse_openvpn_status_log() -> Dict[str, str]:
                 else:
                     logger.warning(f"[MONITOR] Line has insufficient parts ({len(parts)} < 2): {line}")
         else:
-            logger.warning(f"[MONITOR] ROUTING TABLE section not found in content")
-            logger.debug(f"[MONITOR] Content preview:\n{content[:1000]}")
+            logger.error(f"[MONITOR] ❌ ROUTING TABLE section not found in content")
+            print(f"[MONITOR] ❌ ROUTING TABLE section not found!")
+            print(f"[MONITOR] Content length: {len(content)}")
+            print(f"[MONITOR] Content preview:\n{content[:500]}")
+            logger.error(f"[MONITOR] Content preview:\n{content[:1000]}")
+            logger.error(f"[MONITOR] Full content:\n{content}")
+            logger.error(f"[MONITOR] 'ROUTING' in content: {'ROUTING' in content}")
+            logger.error(f"[MONITOR] 'TABLE' in content: {'TABLE' in content}")
+            logger.error(f"[MONITOR] 'ROUTING TABLE' in content: {'ROUTING TABLE' in content}")
 
         # Also verify in CLIENT LIST that the router is actually connected
         # Note: The header is "OpenVPN CLIENT LIST" (with "OpenVPN" prefix)
@@ -204,7 +221,13 @@ def parse_openvpn_status_log() -> Dict[str, str]:
             
             logger.info(f"[MONITOR] Routers after filtering (in both sections): {username_to_ip}")
         else:
-            logger.warning(f"[MONITOR] OpenVPN CLIENT LIST section not found in content")
+            logger.error(f"[MONITOR] ❌ OpenVPN CLIENT LIST section not found in content")
+            print(f"\n[MONITOR] ❌ OpenVPN CLIENT LIST section not found!")
+            logger.error(f"[MONITOR] 'CLIENT' in content: {'CLIENT' in content}")
+            logger.error(f"[MONITOR] 'OpenVPN' in content: {'OpenVPN' in content}")
+            logger.error(f"[MONITOR] 'OpenVPN CLIENT LIST' in content: {'OpenVPN CLIENT LIST' in content}")
+            logger.error(f"[MONITOR] Searching for 'CLIENT' in content: {'CLIENT' in content}")
+            logger.error(f"[MONITOR] Searching for 'OpenVPN' in content: {'OpenVPN' in content}")
 
     except subprocess.TimeoutExpired:
         logger.error(f"Timeout reading OpenVPN status log via SSH")
@@ -223,6 +246,9 @@ def update_router_statuses():
     """
     Background task to update router statuses based on OpenVPN log and API tests.
     """
+    print("\n" + "=" * 80)
+    print("[MONITOR] ===== STARTING ROUTER STATUS MONITORING CYCLE =====")
+    print("=" * 80 + "\n")
     logger.info("=" * 60)
     logger.info("Starting router status monitoring cycle")
     logger.info("=" * 60)
