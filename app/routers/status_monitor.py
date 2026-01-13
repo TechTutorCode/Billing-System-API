@@ -4,7 +4,7 @@ import logging
 import re
 import subprocess
 from datetime import datetime, timezone
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
 from sqlalchemy.orm import Session
 
@@ -13,6 +13,7 @@ from app.database import SessionLocal
 from app.routers.models import Router, RouterStatus
 from app.routers.services import router_service
 from app.routers.mikrotik_service import mikrotik_service
+from app.routers.status_history_models import RouterStatusHistory
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +58,7 @@ def _build_ssh_command(remote_command: str) -> list:
     return ssh_cmd + [ssh_target, remote_command]
 
 
-def parse_openvpn_status_log() -> Dict[str, str]:
+def parse_openvpn_status_log() -> Dict[str, Tuple[str, Optional[str]]]:
     """
     Parse OpenVPN status log to extract VPN IPs mapped to usernames.
     Reads the log file from the host machine via SSH.
@@ -67,13 +68,15 @@ def parse_openvpn_status_log() -> Dict[str, str]:
     ROUTING_TABLE: Virtual Address,Common Name,Real Address,Last Ref
 
     Returns:
-        Dictionary mapping vpn_username to vpn_ip
+        Dictionary mapping vpn_username to (vpn_ip, connected_since)
+        connected_since is a string timestamp or None
     """
     logger.info("=" * 80)
     logger.info("[MONITOR] parse_openvpn_status_log() CALLED")
     logger.info("=" * 80)
     
     username_to_ip: Dict[str, str] = {}
+    username_to_connected_since: Dict[str, str] = {}
 
     try:
         # Read OpenVPN status log from host machine via SSH
@@ -265,7 +268,13 @@ def parse_openvpn_status_log() -> Dict[str, str]:
                     username = parts[0].strip()
                     if username:
                         connected_usernames.add(username)
-                        logger.info(f"[MONITOR] ✓ Found connected username in CLIENT LIST: {username}")
+                        # Extract Connected Since (5th column, index 4)
+                        if len(parts) >= 5:
+                            connected_since = parts[4].strip()
+                            username_to_connected_since[username] = connected_since
+                            logger.info(f"[MONITOR] ✓ Found connected username: {username}, Connected Since: {connected_since}")
+                        else:
+                            logger.info(f"[MONITOR] ✓ Found connected username: {username}, Connected Since: not available")
 
             logger.info(f"[MONITOR] Total connected usernames in CLIENT LIST: {len(connected_usernames)}")
             logger.info(f"[MONITOR] Connected usernames: {connected_usernames}")
@@ -325,11 +334,11 @@ def update_router_statuses():
 
         # Parse OpenVPN status log
         logger.info(f"Reading OpenVPN status log from host: {OPENVPN_STATUS_LOG}")
-        username_to_ip = parse_openvpn_status_log()
+        router_info = parse_openvpn_status_log()  # Returns Dict[str, Tuple[str, Optional[str]]]
         
-        logger.info(f"Parsed {len(username_to_ip)} router(s) from OpenVPN status log")
-        if username_to_ip:
-            logger.info(f"Connected routers: {username_to_ip}")
+        logger.info(f"Parsed {len(router_info)} router(s) from OpenVPN status log")
+        if router_info:
+            logger.info(f"Connected routers: {list(router_info.keys())}")
         else:
             logger.warning("No routers found in OpenVPN status log")
 
@@ -339,7 +348,11 @@ def update_router_statuses():
                 logger.info(f"  Current status: {router.status}")
                 logger.info(f"  Current VPN IP: {router.vpn_ip}")
                 
-                vpn_ip = username_to_ip.get(router.vpn_username)
+                router_data = router_info.get(router.vpn_username)
+                vpn_ip = router_data[0] if router_data else None
+                connected_since_str = router_data[1] if router_data and len(router_data) > 1 else None
+                mikrotik_api_accessible = False
+                final_status = router.status
 
                 if vpn_ip:
                     logger.info(f"  ✓ Router found in VPN log with IP: {vpn_ip}")
@@ -367,6 +380,8 @@ def update_router_statuses():
                     logger.info(f"  → Testing MikroTik API connection at {vpn_ip}:{router.api_port}")
                     if mikrotik_service.test_api_connection(vpn_ip, router.api_port):
                         logger.info(f"  ✓ MikroTik API is accessible")
+                        mikrotik_api_accessible = True
+                        final_status = RouterStatus.ONLINE.value
                         # API is accessible, router is online - update last_seen
                         if router.status != RouterStatus.ONLINE.value:
                             logger.info(f"  → Updating status from {router.status} to ONLINE")
@@ -385,6 +400,8 @@ def update_router_statuses():
                             )
                     else:
                         logger.info(f"  ✗ MikroTik API not accessible")
+                        mikrotik_api_accessible = False
+                        final_status = RouterStatus.VPN_CONNECTED.value
                         # VPN connected but API not accessible
                         if router.status != RouterStatus.VPN_CONNECTED.value:
                             logger.info(f"  → Updating status from {router.status} to VPN_CONNECTED")
@@ -403,6 +420,7 @@ def update_router_statuses():
                             )
                 else:
                     logger.info(f"  ✗ Router NOT found in VPN log")
+                    final_status = RouterStatus.OFFLINE.value if router.status != RouterStatus.PENDING.value else RouterStatus.PENDING.value
                     # Router not in VPN log, mark as offline
                     if router.status != RouterStatus.PENDING.value:
                         logger.info(f"  → Updating status from {router.status} to OFFLINE")
@@ -414,9 +432,44 @@ def update_router_statuses():
                     else:
                         logger.info(f"  → Router is still PENDING, keeping status as is")
 
+                # Parse Connected Since timestamp if available
+                connected_since_dt = None
+                if connected_since_str:
+                    try:
+                        # OpenVPN format: "Mon Jan  1 12:00:00 2024" or "2024-01-01 12:00:00"
+                        # Try parsing common OpenVPN timestamp formats
+                        from dateutil import parser as date_parser
+                        connected_since_dt = date_parser.parse(connected_since_str)
+                        logger.debug(f"  → Parsed Connected Since: {connected_since_dt}")
+                    except Exception as e:
+                        logger.warning(f"  → Failed to parse Connected Since '{connected_since_str}': {str(e)}")
+                        connected_since_dt = None
+
+                # Record status history for this cycle
+                # Refresh router to get latest status and vpn_ip
+                db.refresh(router)
+                status_history = RouterStatusHistory(
+                    router_id=router.id,
+                    status=router.status,
+                    vpn_ip=router.vpn_ip,
+                    api_port=router.api_port,
+                    mikrotik_api_accessible=mikrotik_api_accessible,
+                    connected_since=connected_since_dt
+                )
+                db.add(status_history)
+                logger.debug(f"  → Recorded status history: {router.status} at {status_history.recorded_at}, Connected Since: {connected_since_dt}")
+
             except Exception as e:
                 logger.error(f"Error updating status for router {router.id}: {str(e)}", exc_info=True)
                 continue
+        
+        # Commit all status history records
+        try:
+            db.commit()
+            logger.info(f"Committed status history records for {len(routers)} router(s)")
+        except Exception as e:
+            logger.error(f"Error committing status history: {str(e)}", exc_info=True)
+            db.rollback()
         
         logger.info("=" * 60)
         logger.info("Router status monitoring cycle completed")

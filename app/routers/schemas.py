@@ -100,3 +100,33 @@ class RouterConfigResponse(BaseModel):
             }
         }
 
+
+class RouterStatusHistoryResponse(BaseModel):
+    """Schema for router status history response."""
+
+    id: str
+    router_id: str
+    status: str
+    vpn_ip: Optional[str] = None
+    api_port: int
+    mikrotik_api_accessible: bool
+    connected_since: Optional[str] = None
+    recorded_at: str
+
+    class Config:
+        """Pydantic config."""
+
+        from_attributes = True
+        json_schema_extra = {
+            "example": {
+                "id": "123e4567-e89b-12d3-a456-426614174000",
+                "router_id": "123e4567-e89b-12d3-a456-426614174001",
+                "status": "online",
+                "vpn_ip": "10.8.0.5",
+                "api_port": 8728,
+                "mikrotik_api_accessible": True,
+                "connected_since": "2024-01-01T11:00:00Z",
+                "recorded_at": "2024-01-01T12:00:00Z"
+            }
+        }
+

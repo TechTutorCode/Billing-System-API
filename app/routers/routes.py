@@ -2,8 +2,9 @@
 
 import uuid
 from typing import Dict, List
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_isp
@@ -11,12 +12,14 @@ from app.config import get_settings
 from app.database import get_db
 from app.isps.models import ISPDetails
 from app.routers.models import Router
+from app.routers.status_history_models import RouterStatusHistory
 from app.routers.schemas import (
-    RouterConfigResponse,
-    RouterCreateRequest,
-    RouterCreateResponse,
-    RouterResponse,
-)
+        RouterConfigResponse,
+        RouterCreateRequest,
+        RouterCreateResponse,
+        RouterResponse,
+        RouterStatusHistoryResponse,
+    )
 from app.routers.services import router_service
 
 router = APIRouter(prefix="/api/routers", tags=["Routers"])
@@ -290,5 +293,83 @@ def delete_router(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete router: {str(e)}"
+        )
+
+
+@router.get(
+    "/{router_id}/status-history",
+    response_model=List[RouterStatusHistoryResponse],
+    summary="Get Router Status History",
+    description="Get status history for a specific router. Returns all recorded statuses from monitoring cycles."
+)
+def get_router_status_history(
+    router_id: str,
+    current_isp: ISPDetails = Depends(get_current_isp),
+    db: Session = Depends(get_db),
+    limit: int = Query(default=100, ge=1, le=1000, description="Maximum number of records to return")
+):
+    """
+    Get router status history.
+
+    This endpoint:
+    - Returns status history records for the specified router
+    - Only accessible by router owner (ISP)
+    - Limited to most recent records (default 100, max 1000)
+    """
+    try:
+        router_uuid = UUID(router_id)
+
+        # Verify router belongs to current ISP
+        router = (
+            db.query(Router)
+            .filter(
+                Router.id == router_uuid,
+                Router.isp_id == current_isp.id,
+                Router.is_active == True
+            )
+            .first()
+        )
+
+        if not router:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Router not found"
+            )
+
+        # Get status history
+        history_records = (
+            db.query(RouterStatusHistory)
+            .filter(RouterStatusHistory.router_id == router_uuid)
+            .order_by(RouterStatusHistory.recorded_at.desc())
+            .limit(limit)
+            .all()
+        )
+
+        history_responses = [
+            RouterStatusHistoryResponse(
+                    id=str(h.id),
+                    router_id=str(h.router_id),
+                    status=h.status,
+                    vpn_ip=h.vpn_ip,
+                    api_port=h.api_port,
+                    mikrotik_api_accessible=h.mikrotik_api_accessible,
+                    connected_since=h.connected_since.isoformat() if h.connected_since else None,
+                    recorded_at=h.recorded_at.isoformat() if h.recorded_at else ""
+                )
+                for h in history_records
+            ]
+
+        return history_responses
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid router ID format"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve router status history: {str(e)}"
         )
 

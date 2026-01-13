@@ -17,6 +17,7 @@ from app.email_verification import models as email_verification_models  # noqa: 
 from app.otp import models as otp_models  # noqa: F401
 from app.auth import models as auth_models  # noqa: F401
 from app.routers import models as router_models  # noqa: F401
+from app.routers import status_history_models  # noqa: F401
 
 settings = get_settings()
 
