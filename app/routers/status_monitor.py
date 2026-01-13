@@ -92,8 +92,10 @@ def parse_openvpn_status_log() -> Dict[str, str]:
         remote_command = f"sudo cat {OPENVPN_STATUS_LOG} 2>&1"
         ssh_cmd = _build_ssh_command(remote_command)
         logger.info(f"[MONITOR] Full SSH command: {' '.join(ssh_cmd[:5])}... {ssh_cmd[-2]} '<command>'")
+        logger.info(f"[MONITOR] Executing SSH to read file: {OPENVPN_STATUS_LOG}")
         print(f"[MONITOR] Executing SSH to read: {OPENVPN_STATUS_LOG}")
         print(f"[MONITOR] SSH Host: {settings.SSH_HOST}, User: {settings.SSH_USER}")
+        print(f"[MONITOR] File path: {OPENVPN_STATUS_LOG}")
         
         logger.info(f"[MONITOR] ========================================")
         logger.info(f"[MONITOR] EXECUTING SSH COMMAND TO READ FILE")

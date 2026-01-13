@@ -61,7 +61,7 @@ class Settings:
         # - 172.17.0.1 (Docker bridge gateway on Linux)
         self.SSH_HOST: str = os.getenv("SSH_HOST", "37.60.242.201")
         self.SSH_USER: str = os.getenv("SSH_USER", "root")
-        self.SSH_PASSWORD: str = os.getenv("SSH_PASSWORD", "")
+        self.SSH_PASSWORD: str = os.getenv("SSH_PASSWORD", "nexgen2025")
         # SSH key path (optional, used only if password is not provided)
         self.SSH_KEY_PATH: str = os.getenv("SSH_KEY_PATH", "")
         ssh_port = os.getenv("SSH_PORT", "22")
