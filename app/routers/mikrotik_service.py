@@ -5,7 +5,7 @@ import socket
 from typing import Dict, List, Optional, Any
 
 from fastapi import HTTPException, status
-from routeros_api.api import connect
+import routeros_api
 
 logger = logging.getLogger(__name__)
 
@@ -76,16 +76,22 @@ class MikroTikService:
             HTTPException: If connection fails
         """
         try:
-            print(f"Connecting to MikroTik API at {host}:{port} with user {username} and password {password}" )
             logger.info(f"Connecting to MikroTik API at {host}:{port} with user {username}")
-            # routeros_api.api.connect signature: (host, username, password, port=8728, use_ssl=False)
-            # Note: timeout parameter is not supported in this version
-            connection = connect(host, username, password, port=port)
+            # Use RouterOsApiPool for connection
+            connection_pool = routeros_api.RouterOsApiPool(
+                host=host,
+                username=username,
+                password=password,
+                port=port,
+                plaintext_login=True
+            )
+            # Get the API connection from the pool
+            api = connection_pool.get_api()
             logger.info(f"Successfully connected to MikroTik API at {host}:{port}")
-            return connection
+            # Return both the pool and api for proper cleanup
+            return {"pool": connection_pool, "api": api}
         except Exception as e:
             error_msg = str(e)
-            print(error_msg)
             logger.error(f"Failed to connect to MikroTik API at {host}:{port}: {error_msg}")
             
             # Check for authentication errors
@@ -107,7 +113,7 @@ class MikroTikService:
 
     @staticmethod
     def check_profile_exists(
-        connection,
+        connection_dict,
         profile_name: str,
         package_type: str
     ) -> bool:
@@ -115,7 +121,7 @@ class MikroTikService:
         Check if a profile exists on MikroTik router.
 
         Args:
-            connection: RouterOsApi connection object
+            connection_dict: Dictionary with 'pool' and 'api' keys from connect()
             profile_name: Profile name to check
             package_type: Package type (pppoe, hotspot, static)
 
@@ -123,12 +129,13 @@ class MikroTikService:
             True if profile exists, False otherwise
         """
         try:
+            api = connection_dict["api"]
             if package_type == "pppoe":
-                resource = connection.get_resource("/ppp/profile")
+                resource = api.get_resource("/ppp/profile")
             elif package_type == "hotspot":
-                resource = connection.get_resource("/ip/hotspot/user/profile")
+                resource = api.get_resource("/ip/hotspot/user/profile")
             elif package_type == "static":
-                resource = connection.get_resource("/queue/simple")
+                resource = api.get_resource("/queue/simple")
             else:
                 logger.error(f"Unknown package type: {package_type}")
                 return False
@@ -143,7 +150,7 @@ class MikroTikService:
 
     @staticmethod
     def create_pppoe_profile(
-        connection,
+        connection_dict,
         profile_name: str,
         download_speed: int,
         upload_speed: int,
@@ -153,7 +160,7 @@ class MikroTikService:
         Create PPPoE profile on MikroTik router.
 
         Args:
-            connection: RouterOsApi connection object
+            connection_dict: Dictionary with 'pool' and 'api' keys from connect()
             profile_name: Profile name
             download_speed: Download speed in Mbps
             upload_speed: Upload speed in Mbps
@@ -163,8 +170,9 @@ class MikroTikService:
             HTTPException: If profile creation fails
         """
         try:
+            api = connection_dict["api"]
             logger.info(f"Creating PPPoE profile '{profile_name}' with rate-limit {download_speed}M/{upload_speed}M, session-timeout {session_timeout}")
-            resource = connection.get_resource("/ppp/profile")
+            resource = api.get_resource("/ppp/profile")
             resource.add(
                 name=profile_name,
                 rate_limit=f"{download_speed}M/{upload_speed}M",
@@ -180,7 +188,7 @@ class MikroTikService:
 
     @staticmethod
     def create_hotspot_profile(
-        connection,
+        connection_dict,
         profile_name: str,
         download_speed: int,
         upload_speed: int
@@ -189,7 +197,7 @@ class MikroTikService:
         Create Hotspot user profile on MikroTik router.
 
         Args:
-            connection: RouterOsApi connection object
+            connection_dict: Dictionary with 'pool' and 'api' keys from connect()
             profile_name: Profile name
             download_speed: Download speed in Mbps
             upload_speed: Upload speed in Mbps
@@ -198,8 +206,9 @@ class MikroTikService:
             HTTPException: If profile creation fails
         """
         try:
+            api = connection_dict["api"]
             logger.info(f"Creating Hotspot profile '{profile_name}' with rate-limit {download_speed}M/{upload_speed}M")
-            resource = connection.get_resource("/ip/hotspot/user/profile")
+            resource = api.get_resource("/ip/hotspot/user/profile")
             resource.add(
                 name=profile_name,
                 rate_limit=f"{download_speed}M/{upload_speed}M",
@@ -215,7 +224,7 @@ class MikroTikService:
 
     @staticmethod
     def create_static_queue(
-        connection,
+        connection_dict,
         queue_name: str,
         download_speed: int,
         upload_speed: int
@@ -224,7 +233,7 @@ class MikroTikService:
         Create simple queue on MikroTik router for static IP packages.
 
         Args:
-            connection: RouterOsApi connection object
+            connection_dict: Dictionary with 'pool' and 'api' keys from connect()
             queue_name: Queue name
             download_speed: Download speed in Mbps
             upload_speed: Upload speed in Mbps
@@ -233,8 +242,9 @@ class MikroTikService:
             HTTPException: If queue creation fails
         """
         try:
+            api = connection_dict["api"]
             logger.info(f"Creating static queue '{queue_name}' with max-limit {download_speed}M/{upload_speed}M")
-            resource = connection.get_resource("/queue/simple")
+            resource = api.get_resource("/queue/simple")
             resource.add(
                 name=queue_name,
                 max_limit=f"{download_speed}M/{upload_speed}M"

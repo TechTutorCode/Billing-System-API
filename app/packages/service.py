@@ -505,14 +505,12 @@ class PackageService:
                 detail=f"Failed to sync package to MikroTik: {str(e)}"
             )
         finally:
-            # Close connection if it was opened
+            # Close connection pool if it was opened
             if connection:
                 try:
-                    # Try different disconnect methods based on library version
-                    if hasattr(connection, 'disconnect'):
-                        connection.disconnect()
-                    elif hasattr(connection, 'close'):
-                        connection.close()
+                    connection_pool = connection.get("pool")
+                    if connection_pool:
+                        connection_pool.disconnect()
                 except Exception as e:
                     logger.warning(f"Error closing MikroTik connection: {str(e)}")
 
