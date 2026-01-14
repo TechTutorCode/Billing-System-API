@@ -463,7 +463,7 @@ class PackageService:
                 # Create profile based on package type
                 if package_type_name == "pppoe":
                     mikrotik_service.create_pppoe_profile(
-                        connection=connection,
+                        connection_dict=connection,
                         profile_name=profile_name,
                         download_speed=package.download_speed,
                         upload_speed=package.upload_speed,
@@ -471,14 +471,14 @@ class PackageService:
                     )
                 elif package_type_name == "hotspot":
                     mikrotik_service.create_hotspot_profile(
-                        connection=connection,
+                        connection_dict=connection,
                         profile_name=profile_name,
                         download_speed=package.download_speed,
                         upload_speed=package.upload_speed
                     )
                 elif package_type_name == "static":
                     mikrotik_service.create_static_queue(
-                        connection=connection,
+                        connection_dict=connection,
                         queue_name=profile_name,
                         download_speed=package.download_speed,
                         upload_speed=package.upload_speed
