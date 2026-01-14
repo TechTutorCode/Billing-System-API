@@ -58,6 +58,9 @@ class ServicePackage(Base):
         index=True
     )
     mikrotik_profile = Column(String, nullable=True)
+    mikrotik_profile_name = Column(String, nullable=True, index=True)
+    mikrotik_synced = Column(Boolean, default=False, nullable=False, index=True)
+    mikrotik_synced_at = Column(DateTime(timezone=True), nullable=True)
     is_active = Column(Boolean, default=True, nullable=False, index=True)
     created_at = Column(
         DateTime(timezone=True),

@@ -102,6 +102,9 @@ class PackageResponse(BaseModel):
     package_type_id: str
     package_type: PackageTypeResponse
     mikrotik_profile: Optional[str] = None
+    mikrotik_profile_name: Optional[str] = None
+    mikrotik_synced: bool = False
+    mikrotik_synced_at: Optional[str] = None
     is_active: bool
     created_at: str
     updated_at: str
@@ -129,9 +132,46 @@ class PackageResponse(BaseModel):
                     "created_at": "2024-01-01T00:00:00Z"
                 },
                 "mikrotik_profile": None,
+                "mikrotik_profile_name": None,
+                "mikrotik_synced": False,
+                "mikrotik_synced_at": None,
                 "is_active": True,
                 "created_at": "2024-01-01T00:00:00Z",
                 "updated_at": "2024-01-01T00:00:00Z"
+            }
+        }
+
+
+class PackageSyncRequest(BaseModel):
+    """Schema for package sync request."""
+
+    api_password: Optional[str] = Field(default=None, description="MikroTik API password (if not stored)")
+
+    class Config:
+        """Pydantic config."""
+
+        json_schema_extra = {
+            "example": {
+                "api_password": "mikrotik_password"
+            }
+        }
+
+
+class PackageSyncResponse(BaseModel):
+    """Schema for package sync response."""
+
+    status: str = Field(..., description="Sync status")
+    profile: str = Field(..., description="MikroTik profile name")
+    router: str = Field(..., description="Router name")
+
+    class Config:
+        """Pydantic config."""
+
+        json_schema_extra = {
+            "example": {
+                "status": "success",
+                "profile": "pkg_123e4567e89b",
+                "router": "Main Router"
             }
         }
 

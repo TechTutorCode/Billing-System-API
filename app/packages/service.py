@@ -1,5 +1,6 @@
 """Package business logic services."""
 
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
@@ -9,8 +10,12 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.packages.models import PackageType, ServicePackage
-from app.packages.types import PackageType as PackageTypeEnum
+from app.packages.types import PackageType as PackageTypeEnum, ValidityUnit
 from app.routers.models import Router
+from app.routers.mikrotik_service import mikrotik_service
+from app.routers.utils import verify_vpn_password
+
+logger = logging.getLogger(__name__)
 
 
 class PackageService:
@@ -305,6 +310,207 @@ class PackageService:
         db.refresh(package)
 
         return package
+
+    @staticmethod
+    def convert_validity_to_mikrotik_format(validity_value: int, validity_unit: str) -> str:
+        """
+        Convert validity to MikroTik format.
+
+        Args:
+            validity_value: Validity value (e.g., 30)
+            validity_unit: Validity unit (minutes, hours, days)
+
+        Returns:
+            MikroTik format string (e.g., "30d", "12h", "90m")
+
+        Raises:
+            HTTPException: If validity unit is invalid
+        """
+        if validity_unit == ValidityUnit.MINUTES.value:
+            return f"{validity_value}m"
+        elif validity_unit == ValidityUnit.HOURS.value:
+            return f"{validity_value}h"
+        elif validity_unit == ValidityUnit.DAYS.value:
+            return f"{validity_value}d"
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid validity unit: {validity_unit}"
+            )
+
+    @staticmethod
+    def sync_package_to_mikrotik(
+        db: Session,
+        package_id: UUID,
+        isp_id: UUID,
+        api_password: Optional[str] = None
+    ) -> ServicePackage:
+        """
+        Sync package to MikroTik router.
+
+        This function:
+        - Loads package and router
+        - Validates router is active and has VPN IP
+        - Connects to MikroTik via API
+        - Checks if profile already exists (idempotent)
+        - Creates profile if missing
+        - Updates package sync status
+
+        Args:
+            db: Database session
+            package_id: Package ID
+            isp_id: ISP ID (for ownership verification)
+            api_password: MikroTik API password (if not stored encrypted)
+
+        Returns:
+            Updated ServicePackage instance
+
+        Raises:
+            HTTPException: If validation fails or sync fails
+        """
+        # Get package and verify ownership
+        package = PackageService.get_package_by_id(db, package_id, isp_id)
+
+        # Load router with package type
+        router = (
+            db.query(Router)
+            .filter(Router.id == package.router_id)
+            .first()
+        )
+
+        if not router:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Router not found"
+            )
+
+        # Validate router is active
+        if not router.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Router is not active"
+            )
+
+        # Validate router has VPN IP
+        if not router.vpn_ip:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Router VPN IP not available. Router must be connected via VPN."
+            )
+
+        # Get package type name
+        package_type = db.query(PackageType).filter(PackageType.id == package.package_type_id).first()
+        if not package_type:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Package type not found"
+            )
+
+        package_type_name = package_type.name.lower()
+
+        # Validate package type
+        if package_type_name not in ["pppoe", "hotspot", "static"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid package type for MikroTik sync: {package_type_name}"
+            )
+
+        # Generate profile name
+        profile_name = f"pkg_{str(package.id).replace('-', '')[:12]}"
+
+        # Connect to MikroTik
+        api_username = router.mikrotik_api_username or "admin"
+        
+        # Get API password - try provided, then stored (if unencrypted), then raise error
+        # Note: In production, you should use symmetric encryption (e.g., Fernet) for API passwords
+        # since they need to be decrypted, unlike VPN passwords which use bcrypt (one-way hash)
+        if api_password:
+            api_password_plain = api_password
+        elif router.mikrotik_api_password_encrypted:
+            # If stored encrypted, we can't decrypt bcrypt hashes
+            # For now, require password to be provided in request
+            # TODO: Implement symmetric encryption for API passwords
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="MikroTik API password required. Please provide it in the request body."
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="MikroTik API password not configured. Please provide it in the request body."
+            )
+
+        connection = None
+        try:
+            # Connect to MikroTik
+            connection = mikrotik_service.connect(
+                host=router.vpn_ip,
+                username=api_username,
+                password=api_password_plain,
+                port=router.api_port
+            )
+
+            # Check if profile already exists (idempotent)
+            if mikrotik_service.check_profile_exists(connection, profile_name, package_type_name):
+                logger.info(f"Profile '{profile_name}' already exists on router, skipping creation")
+            else:
+                # Convert validity to MikroTik format
+                session_timeout = PackageService.convert_validity_to_mikrotik_format(
+                    package.validity_value,
+                    package.validity_unit
+                )
+
+                # Create profile based on package type
+                if package_type_name == "pppoe":
+                    mikrotik_service.create_pppoe_profile(
+                        connection=connection,
+                        profile_name=profile_name,
+                        download_speed=package.download_speed,
+                        upload_speed=package.upload_speed,
+                        session_timeout=session_timeout
+                    )
+                elif package_type_name == "hotspot":
+                    mikrotik_service.create_hotspot_profile(
+                        connection=connection,
+                        profile_name=profile_name,
+                        download_speed=package.download_speed,
+                        upload_speed=package.upload_speed
+                    )
+                elif package_type_name == "static":
+                    mikrotik_service.create_static_queue(
+                        connection=connection,
+                        queue_name=profile_name,
+                        download_speed=package.download_speed,
+                        upload_speed=package.upload_speed
+                    )
+
+                logger.info(f"Successfully created profile '{profile_name}' on router")
+
+            # Update package sync status
+            package.mikrotik_profile_name = profile_name
+            package.mikrotik_synced = True
+            package.mikrotik_synced_at = datetime.now(timezone.utc)
+            package.updated_at = datetime.now(timezone.utc)
+            db.commit()
+            db.refresh(package)
+
+            return package
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to sync package to MikroTik: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to sync package to MikroTik: {str(e)}"
+            )
+        finally:
+            # Close connection if it was opened
+            if connection:
+                try:
+                    connection.disconnect()
+                except Exception as e:
+                    logger.warning(f"Error closing MikroTik connection: {str(e)}")
 
 
 # Global instance

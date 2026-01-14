@@ -12,6 +12,8 @@ from app.isps.models import ISPDetails
 from app.packages.schemas import (
     PackageCreate,
     PackageResponse,
+    PackageSyncRequest,
+    PackageSyncResponse,
     PackageTypeResponse,
     PackageUpdate,
 )
@@ -103,6 +105,9 @@ def create_package(
                 created_at=package.package_type.created_at.isoformat()
             ),
             mikrotik_profile=package.mikrotik_profile,
+            mikrotik_profile_name=package.mikrotik_profile_name,
+            mikrotik_synced=package.mikrotik_synced,
+            mikrotik_synced_at=package.mikrotik_synced_at.isoformat() if package.mikrotik_synced_at else None,
             is_active=package.is_active,
             created_at=package.created_at.isoformat(),
             updated_at=package.updated_at.isoformat()
@@ -165,6 +170,9 @@ def list_packages_by_router(
                         created_at=package.package_type.created_at.isoformat()
                     ),
                     mikrotik_profile=package.mikrotik_profile,
+                    mikrotik_profile_name=package.mikrotik_profile_name,
+                    mikrotik_synced=package.mikrotik_synced,
+                    mikrotik_synced_at=package.mikrotik_synced_at.isoformat() if package.mikrotik_synced_at else None,
                     is_active=package.is_active,
                     created_at=package.created_at.isoformat(),
                     updated_at=package.updated_at.isoformat()
@@ -238,6 +246,9 @@ def update_package(
                 created_at=package.package_type.created_at.isoformat()
             ),
             mikrotik_profile=package.mikrotik_profile,
+            mikrotik_profile_name=package.mikrotik_profile_name,
+            mikrotik_synced=package.mikrotik_synced,
+            mikrotik_synced_at=package.mikrotik_synced_at.isoformat() if package.mikrotik_synced_at else None,
             is_active=package.is_active,
             created_at=package.created_at.isoformat(),
             updated_at=package.updated_at.isoformat()
@@ -304,6 +315,9 @@ def disable_package(
                 created_at=package.package_type.created_at.isoformat()
             ),
             mikrotik_profile=package.mikrotik_profile,
+            mikrotik_profile_name=package.mikrotik_profile_name,
+            mikrotik_synced=package.mikrotik_synced,
+            mikrotik_synced_at=package.mikrotik_synced_at.isoformat() if package.mikrotik_synced_at else None,
             is_active=package.is_active,
             created_at=package.created_at.isoformat(),
             updated_at=package.updated_at.isoformat()
@@ -370,6 +384,9 @@ def enable_package(
                 created_at=package.package_type.created_at.isoformat()
             ),
             mikrotik_profile=package.mikrotik_profile,
+            mikrotik_profile_name=package.mikrotik_profile_name,
+            mikrotik_synced=package.mikrotik_synced,
+            mikrotik_synced_at=package.mikrotik_synced_at.isoformat() if package.mikrotik_synced_at else None,
             is_active=package.is_active,
             created_at=package.created_at.isoformat(),
             updated_at=package.updated_at.isoformat()
@@ -385,5 +402,66 @@ def enable_package(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to enable package: {str(e)}"
+        )
+
+
+@router.post(
+    "/packages/{package_id}/sync",
+    response_model=PackageSyncResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Sync Package to MikroTik",
+    description="Sync package to MikroTik router. Creates profile if it doesn't exist (idempotent)."
+)
+def sync_package_to_mikrotik(
+    package_id: str,
+    request: PackageSyncRequest,
+    current_isp: ISPDetails = Depends(get_current_isp),
+    db: Session = Depends(get_db)
+):
+    """
+    Sync package to MikroTik router.
+
+    This endpoint:
+    - Connects to the router's MikroTik API
+    - Checks if profile already exists (idempotent)
+    - Creates profile if missing
+    - Updates package sync status
+
+    Requires:
+    - Valid JWT access token
+    - Package must belong to ISP's router
+    - Router must be active and have VPN IP
+    - MikroTik API password (if not stored)
+    """
+    try:
+        package_uuid = UUID(package_id)
+        package = package_service.sync_package_to_mikrotik(
+            db=db,
+            package_id=package_uuid,
+            isp_id=current_isp.id,
+            api_password=request.api_password
+        )
+
+        # Get router name
+        from app.routers.models import Router
+        router = db.query(Router).filter(Router.id == package.router_id).first()
+        router_name = router.name if router else "Unknown"
+
+        return PackageSyncResponse(
+            status="success",
+            profile=package.mikrotik_profile_name or "",
+            router=router_name
+        )
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid package ID format"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to sync package to MikroTik: {str(e)}"
         )
 
