@@ -5,7 +5,7 @@ import socket
 from typing import Dict, List, Optional, Any
 
 from fastapi import HTTPException, status
-from routeros_api import RouterOsApi
+from routeros_api.api import connect
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +58,7 @@ class MikroTikService:
         password: str,
         port: int = 8728,
         timeout: int = 10
-    ) -> RouterOsApi:
+    ):
         """
         Connect to MikroTik router via API.
 
@@ -70,14 +70,15 @@ class MikroTikService:
             timeout: Connection timeout in seconds
 
         Returns:
-            RouterOsApi connection object
+            RouterOS API connection object
 
         Raises:
             HTTPException: If connection fails
         """
         try:
             logger.info(f"Connecting to MikroTik API at {host}:{port} with user {username}")
-            connection = RouterOsApi(host, username=username, password=password, port=port, timeout=timeout)
+            # routeros_api.api.connect signature: (host, username, password, port=8728, timeout=10, use_ssl=False)
+            connection = connect(host, username, password, port=port, timeout=timeout)
             logger.info(f"Successfully connected to MikroTik API at {host}:{port}")
             return connection
         except Exception as e:
@@ -89,7 +90,7 @@ class MikroTikService:
 
     @staticmethod
     def check_profile_exists(
-        connection: RouterOsApi,
+        connection,
         profile_name: str,
         package_type: str
     ) -> bool:
@@ -125,7 +126,7 @@ class MikroTikService:
 
     @staticmethod
     def create_pppoe_profile(
-        connection: RouterOsApi,
+        connection,
         profile_name: str,
         download_speed: int,
         upload_speed: int,
@@ -162,7 +163,7 @@ class MikroTikService:
 
     @staticmethod
     def create_hotspot_profile(
-        connection: RouterOsApi,
+        connection,
         profile_name: str,
         download_speed: int,
         upload_speed: int
@@ -197,7 +198,7 @@ class MikroTikService:
 
     @staticmethod
     def create_static_queue(
-        connection: RouterOsApi,
+        connection,
         queue_name: str,
         download_speed: int,
         upload_speed: int

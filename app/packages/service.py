@@ -508,7 +508,11 @@ class PackageService:
             # Close connection if it was opened
             if connection:
                 try:
-                    connection.disconnect()
+                    # Try different disconnect methods based on library version
+                    if hasattr(connection, 'disconnect'):
+                        connection.disconnect()
+                    elif hasattr(connection, 'close'):
+                        connection.close()
                 except Exception as e:
                     logger.warning(f"Error closing MikroTik connection: {str(e)}")
 
