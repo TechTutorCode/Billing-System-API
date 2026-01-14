@@ -127,24 +127,24 @@ async def startup_event():
     
     async def monitor_loop():
         """Background task to monitor router statuses."""
-        print("[MONITOR] Router status monitor loop started. Will run every 10 seconds.")
-        logger.info("Router status monitor loop started. Will run every 10 seconds.")
+        print("[MONITOR] Router status monitor loop started. Will run every 2 minutes.")
+        logger.info("Router status monitor loop started. Will run every 2 minutes.")
         while True:
             try:
                 # Run in thread pool to avoid blocking
                 loop = asyncio.get_event_loop()
                 print("[MONITOR] Starting monitoring cycle...")
                 await loop.run_in_executor(None, update_router_statuses)
-                # Run every 10 seconds
-                print("[MONITOR] Monitoring cycle completed. Waiting 10 seconds before next check...")
-                logger.debug("Waiting 10 seconds before next status check...")
-                await asyncio.sleep(10)
+                # Run every 2 minutes (120 seconds)
+                print("[MONITOR] Monitoring cycle completed. Waiting 2 minutes before next check...")
+                logger.debug("Waiting 2 minutes before next status check...")
+                await asyncio.sleep(120)
             except Exception as e:
                 print(f"[MONITOR] ❌ Error in status monitor loop: {str(e)}")
                 logger.error(f"Error in status monitor loop: {str(e)}", exc_info=True)
-                print("[MONITOR] Waiting 10 seconds before retrying...")
-                logger.info("Waiting 10 seconds before retrying...")
-                await asyncio.sleep(10)
+                print("[MONITOR] Waiting 60 seconds before retrying...")
+                logger.info("Waiting 60 seconds before retrying...")
+                await asyncio.sleep(60)
     
     # Start background task
     asyncio.create_task(monitor_loop())

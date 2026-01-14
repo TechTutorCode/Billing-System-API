@@ -85,6 +85,7 @@ class MikroTikService:
             return connection
         except Exception as e:
             error_msg = str(e)
+            print(error_msg)
             logger.error(f"Failed to connect to MikroTik API at {host}:{port}: {error_msg}")
             
             # Check for authentication errors
