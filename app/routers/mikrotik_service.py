@@ -76,9 +76,11 @@ class MikroTikService:
             HTTPException: If connection fails
         """
         try:
+            print(f"Connecting to MikroTik API at {host}:{port} with user {username} and password {password}" )
             logger.info(f"Connecting to MikroTik API at {host}:{port} with user {username}")
-            # routeros_api.api.connect signature: (host, username, password, port=8728, timeout=10, use_ssl=False)
-            connection = connect(host, username, password, port=port, timeout=timeout)
+            # routeros_api.api.connect signature: (host, username, password, port=8728, use_ssl=False)
+            # Note: timeout parameter is not supported in this version
+            connection = connect(host, username, password, port=port)
             logger.info(f"Successfully connected to MikroTik API at {host}:{port}")
             return connection
         except Exception as e:
