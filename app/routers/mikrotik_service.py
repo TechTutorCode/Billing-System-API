@@ -212,7 +212,7 @@ class MikroTikService:
             resource.add(
                 name=profile_name,
                 rate_limit=f"{download_speed}M/{upload_speed}M",
-                shared_users=1
+                shared_users="1"
             )
             logger.info(f"Successfully created Hotspot profile '{profile_name}'")
         except Exception as e:
