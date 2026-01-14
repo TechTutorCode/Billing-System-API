@@ -76,7 +76,6 @@ class MikroTikService:
             HTTPException: If connection fails
         """
         try:
-            print(f"Connecting to MikroTik API at {host}:{port} with user {username} and password {password}" )
             logger.info(f"Connecting to MikroTik API at {host}:{port} with user {username}")
             # routeros_api.api.connect signature: (host, username, password, port=8728, use_ssl=False)
             # Note: timeout parameter is not supported in this version
@@ -84,11 +83,25 @@ class MikroTikService:
             logger.info(f"Successfully connected to MikroTik API at {host}:{port}")
             return connection
         except Exception as e:
-            logger.error(f"Failed to connect to MikroTik API at {host}:{port}: {str(e)}")
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=f"Failed to connect to MikroTik router: {str(e)}"
-            )
+            error_msg = str(e)
+            logger.error(f"Failed to connect to MikroTik API at {host}:{port}: {error_msg}")
+            
+            # Check for authentication errors
+            if "invalid user name or password" in error_msg.lower() or "password" in error_msg.lower():
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="MikroTik API authentication failed. Please verify the username and password are correct, and that the API user has API access enabled on the router."
+                )
+            elif "connection" in error_msg.lower() or "refused" in error_msg.lower() or "timeout" in error_msg.lower():
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail=f"Cannot connect to MikroTik router at {host}:{port}. Please verify the router is online and the API port is accessible."
+                )
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail=f"Failed to connect to MikroTik router: {error_msg}"
+                )
 
     @staticmethod
     def check_profile_exists(
