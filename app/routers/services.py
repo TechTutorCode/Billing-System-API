@@ -28,7 +28,9 @@ class RouterService:
         isp: ISPDetails,
         name: str,
         openvpn_server_ip: str,
-        openvpn_server_port: int
+        openvpn_server_port: int,
+        mikrotik_api_username: Optional[str] = "admin",
+        mikrotik_api_password: Optional[str] = None
     ) -> tuple[Router, str]:
         """
         Create a new router and VPN user.
@@ -52,6 +54,13 @@ class RouterService:
         vpn_password = generate_router_password()
         vpn_password_encrypted = encrypt_vpn_password(vpn_password)
 
+        # Encrypt MikroTik API password if provided
+        # Note: Using hash_password (bcrypt) for now, but in production consider
+        # using symmetric encryption (e.g., Fernet) since API passwords need to be decrypted
+        mikrotik_api_password_encrypted = None
+        if mikrotik_api_password:
+            mikrotik_api_password_encrypted = encrypt_vpn_password(mikrotik_api_password)
+
         # Create router record first (to get the ID)
         router = Router(
             isp_id=isp.id,
@@ -59,6 +68,8 @@ class RouterService:
             vpn_username=vpn_username,
             vpn_password_encrypted=vpn_password_encrypted,
             api_port=8728,
+            mikrotik_api_username=mikrotik_api_username or "admin",
+            mikrotik_api_password_encrypted=mikrotik_api_password_encrypted,
             status=RouterStatus.PENDING.value,
             is_active=True
         )
@@ -152,6 +163,52 @@ class RouterService:
         db.commit()
 
         return True
+
+    @staticmethod
+    def update_router(
+        db: Session,
+        router: Router,
+        name: Optional[str] = None,
+        api_port: Optional[int] = None,
+        mikrotik_api_username: Optional[str] = None,
+        mikrotik_api_password: Optional[str] = None
+    ) -> Router:
+        """
+        Update router information.
+
+        Args:
+            db: Database session
+            router: Router instance
+            name: Router name
+            api_port: MikroTik API port
+            mikrotik_api_username: MikroTik API username
+            mikrotik_api_password: MikroTik API password (will be encrypted)
+
+        Returns:
+            Updated router instance
+
+        Raises:
+            HTTPException: If update fails
+        """
+        if name is not None:
+            router.name = name
+
+        if api_port is not None:
+            router.api_port = api_port
+
+        if mikrotik_api_username is not None:
+            router.mikrotik_api_username = mikrotik_api_username
+
+        if mikrotik_api_password is not None:
+            # Encrypt the new password
+            # Note: Using hash_password (bcrypt) for now, but in production consider
+            # using symmetric encryption (e.g., Fernet) since API passwords need to be decrypted
+            router.mikrotik_api_password_encrypted = encrypt_vpn_password(mikrotik_api_password)
+
+        db.commit()
+        db.refresh(router)
+
+        return router
 
     @staticmethod
     def update_router_status(

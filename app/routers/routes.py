@@ -19,6 +19,7 @@ from app.routers.schemas import (
         RouterCreateResponse,
         RouterResponse,
         RouterStatusHistoryResponse,
+        RouterUpdateRequest,
     )
 from app.routers.services import router_service
 
@@ -67,6 +68,7 @@ def list_routers(
                 vpn_username=r.vpn_username,
                 vpn_ip=r.vpn_ip,
                 api_port=r.api_port,
+                mikrotik_api_username=r.mikrotik_api_username,
                 status=r.status,
                 last_seen=r.last_seen.isoformat() if r.last_seen else None,
                 created_at=r.created_at.isoformat() if r.created_at else ""
@@ -118,7 +120,9 @@ def create_router(
             isp=current_isp,
             name=request.name,
             openvpn_server_ip=settings.OPENVPN_SERVER_IP,
-            openvpn_server_port=settings.OPENVPN_SERVER_PORT
+            openvpn_server_port=settings.OPENVPN_SERVER_PORT,
+            mikrotik_api_username=request.mikrotik_api_username,
+            mikrotik_api_password=request.mikrotik_api_password
         )
 
         # Generate OpenVPN config
@@ -139,6 +143,7 @@ def create_router(
             vpn_username=router.vpn_username,
             vpn_ip=router.vpn_ip,
             api_port=router.api_port,
+            mikrotik_api_username=router.mikrotik_api_username,
             status=router.status,
             last_seen=router.last_seen.isoformat() if router.last_seen else None,
             created_at=router.created_at.isoformat() if router.created_at else ""
@@ -230,6 +235,83 @@ def get_router_config(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve router config: {str(e)}"
+        )
+
+
+@router.put(
+    "/{router_id}",
+    response_model=RouterResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Update Router",
+    description="Update router information (name, API port, MikroTik API credentials)."
+)
+def update_router(
+    router_id: str,
+    request: RouterUpdateRequest,
+    current_isp: ISPDetails = Depends(get_current_isp),
+    db: Session = Depends(get_db)
+):
+    """
+    Update router information.
+
+    This endpoint:
+    - Updates router name, API port, and MikroTik API credentials
+    - Only accessible by router owner (ISP)
+    - Requires valid JWT access token
+    """
+    try:
+        router_uuid = UUID(router_id)
+
+        # Get router and verify ownership
+        router = (
+            db.query(Router)
+            .filter(
+                Router.id == router_uuid,
+                Router.isp_id == current_isp.id,
+                Router.is_active == True
+            )
+            .first()
+        )
+
+        if not router:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Router not found or does not belong to you"
+            )
+
+        # Update router
+        updated_router = router_service.update_router(
+            db=db,
+            router=router,
+            name=request.name,
+            api_port=request.api_port,
+            mikrotik_api_username=request.mikrotik_api_username,
+            mikrotik_api_password=request.mikrotik_api_password
+        )
+
+        return RouterResponse(
+            id=str(updated_router.id),
+            isp_id=str(updated_router.isp_id),
+            name=updated_router.name,
+            vpn_username=updated_router.vpn_username,
+            vpn_ip=updated_router.vpn_ip,
+            api_port=updated_router.api_port,
+            mikrotik_api_username=updated_router.mikrotik_api_username,
+            status=updated_router.status,
+            last_seen=updated_router.last_seen.isoformat() if updated_router.last_seen else None,
+            created_at=updated_router.created_at.isoformat() if updated_router.created_at else ""
+        )
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid router ID format"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update router: {str(e)}"
         )
 
 

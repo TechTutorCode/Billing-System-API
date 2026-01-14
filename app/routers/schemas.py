@@ -8,13 +8,17 @@ class RouterCreateRequest(BaseModel):
     """Schema for router creation request."""
 
     name: str = Field(..., min_length=1, max_length=255, description="Router name")
+    mikrotik_api_username: Optional[str] = Field(default="admin", min_length=1, max_length=255, description="MikroTik API username (default: admin)")
+    mikrotik_api_password: Optional[str] = Field(default=None, min_length=1, description="MikroTik API password (will be encrypted)")
 
     class Config:
         """Pydantic config."""
 
         json_schema_extra = {
             "example": {
-                "name": "Main Office Router"
+                "name": "Main Office Router",
+                "mikrotik_api_username": "admin",
+                "mikrotik_api_password": "mikrotik_password"
             }
         }
 
@@ -28,6 +32,7 @@ class RouterResponse(BaseModel):
     vpn_username: str
     vpn_ip: Optional[str] = None
     api_port: int
+    mikrotik_api_username: str
     status: str
     last_seen: Optional[str] = None
     created_at: str
@@ -44,9 +49,31 @@ class RouterResponse(BaseModel):
                 "vpn_username": "router_12345678",
                 "vpn_ip": "10.8.0.5",
                 "api_port": 8728,
+                "mikrotik_api_username": "admin",
                 "status": "online",
                 "last_seen": "2024-01-01T12:00:00Z",
                 "created_at": "2024-01-01T00:00:00Z"
+            }
+        }
+
+
+class RouterUpdateRequest(BaseModel):
+    """Schema for router update request."""
+
+    name: Optional[str] = Field(default=None, min_length=1, max_length=255, description="Router name")
+    api_port: Optional[int] = Field(default=None, gt=0, le=65535, description="MikroTik API port (default: 8728)")
+    mikrotik_api_username: Optional[str] = Field(default=None, min_length=1, max_length=255, description="MikroTik API username")
+    mikrotik_api_password: Optional[str] = Field(default=None, min_length=1, description="MikroTik API password (will be encrypted)")
+
+    class Config:
+        """Pydantic config."""
+
+        json_schema_extra = {
+            "example": {
+                "name": "Updated Router Name",
+                "api_port": 8728,
+                "mikrotik_api_username": "admin",
+                "mikrotik_api_password": "new_password"
             }
         }
 
@@ -71,11 +98,12 @@ class RouterCreateResponse(BaseModel):
                     "isp_id": "123e4567-e89b-12d3-a456-426614174001",
                     "name": "Main Office Router",
                     "vpn_username": "router_12345678",
-                    "vpn_ip": None,
-                    "api_port": 8728,
-                    "status": "pending",
-                    "last_seen": None,
-                    "created_at": "2024-01-01T00:00:00Z"
+                "vpn_ip": None,
+                "api_port": 8728,
+                "mikrotik_api_username": "admin",
+                "status": "pending",
+                "last_seen": None,
+                "created_at": "2024-01-01T00:00:00Z"
                 },
                 "openvpn_config": "/interface ovpn-client add ..."
             }
