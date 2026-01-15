@@ -103,6 +103,7 @@ class CustomerResponse(BaseModel):
 
     id: str
     isp_id: str
+    account_number: str
     first_name: str
     last_name: str
     email: Optional[str] = None
@@ -121,6 +122,7 @@ class CustomerResponse(BaseModel):
             "example": {
                 "id": "123e4567-e89b-12d3-a456-426614174000",
                 "isp_id": "123e4567-e89b-12d3-a456-426614174001",
+                "account_number": "cust001",
                 "first_name": "John",
                 "last_name": "Doe",
                 "email": "john.doe@example.com",

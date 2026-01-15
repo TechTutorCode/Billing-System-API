@@ -31,6 +31,7 @@ class Customer(Base):
         nullable=False,
         index=True
     )
+    account_number = Column(String, unique=True, nullable=False, index=True)
     first_name = Column(String, nullable=False)
     last_name = Column(String, nullable=False)
     email = Column(String, nullable=True, index=True)
@@ -59,5 +60,5 @@ class Customer(Base):
     isp = relationship("ISPDetails", backref="customers")
 
     def __repr__(self):
-        return f"<Customer(id={self.id}, name={self.first_name} {self.last_name}, status={self.status})>"
+        return f"<Customer(id={self.id}, account_number={self.account_number}, name={self.first_name} {self.last_name}, status={self.status})>"
 

@@ -46,6 +46,7 @@ def create_customer(
         return CustomerResponse(
             id=str(customer.id),
             isp_id=str(customer.isp_id),
+            account_number=customer.account_number,
             first_name=customer.first_name,
             last_name=customer.last_name,
             email=customer.email,
@@ -103,6 +104,7 @@ def list_customers(
             CustomerResponse(
                 id=str(c.id),
                 isp_id=str(c.isp_id),
+                account_number=c.account_number,
                 first_name=c.first_name,
                 last_name=c.last_name,
                 email=c.email,
@@ -154,6 +156,7 @@ def get_customer(
         return CustomerResponse(
             id=str(customer.id),
             isp_id=str(customer.isp_id),
+            account_number=customer.account_number,
             first_name=customer.first_name,
             last_name=customer.last_name,
             email=customer.email,
@@ -212,6 +215,7 @@ def update_customer(
         return CustomerResponse(
             id=str(customer.id),
             isp_id=str(customer.isp_id),
+            account_number=customer.account_number,
             first_name=customer.first_name,
             last_name=customer.last_name,
             email=customer.email,
@@ -267,6 +271,7 @@ def delete_customer(
         return CustomerResponse(
             id=str(customer.id),
             isp_id=str(customer.isp_id),
+            account_number=customer.account_number,
             first_name=customer.first_name,
             last_name=customer.last_name,
             email=customer.email,

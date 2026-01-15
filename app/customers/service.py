@@ -18,6 +18,47 @@ class CustomerService:
     """Service for customer-related operations."""
 
     @staticmethod
+    def generate_account_number(db: Session) -> str:
+        """
+        Generate a unique account number in format 'cust001', 'cust002', etc.
+
+        Args:
+            db: Database session
+
+        Returns:
+            Unique account number string
+        """
+        # Get the highest account number
+        last_customer = (
+            db.query(Customer)
+            .filter(Customer.account_number.like('cust%'))
+            .order_by(Customer.account_number.desc())
+            .first()
+        )
+
+        if last_customer:
+            # Extract the number part and increment
+            try:
+                last_number = int(last_customer.account_number.replace('cust', ''))
+                next_number = last_number + 1
+            except ValueError:
+                # If format is unexpected, start from 1
+                next_number = 1
+        else:
+            # First customer
+            next_number = 1
+
+        # Format as cust001, cust002, etc. (3 digits minimum)
+        account_number = f"cust{next_number:03d}"
+
+        # Ensure uniqueness (handle race conditions)
+        while db.query(Customer).filter(Customer.account_number == account_number).first():
+            next_number += 1
+            account_number = f"cust{next_number:03d}"
+
+        return account_number
+
+    @staticmethod
     def create_customer(
         db: Session,
         isp_id: UUID,
@@ -44,9 +85,13 @@ class CustomerService:
                 detail="Either email or phone must be provided"
             )
 
+        # Generate unique account number
+        account_number = CustomerService.generate_account_number(db)
+
         # Create customer
         customer = Customer(
             isp_id=isp_id,
+            account_number=account_number,
             **customer_data,
             status=CustomerStatus.ACTIVE.value
         )
@@ -91,6 +136,7 @@ class CustomerService:
             search_pattern = f"%{search}%"
             query = query.filter(
                 or_(
+                    Customer.account_number.ilike(search_pattern),
                     Customer.first_name.ilike(search_pattern),
                     Customer.last_name.ilike(search_pattern),
                     Customer.email.ilike(search_pattern),
