@@ -9,6 +9,7 @@ from app.auth.routes import router as auth_router
 from app.isps.routes import router as isp_router
 from app.routers.routes import router as router_router
 from app.packages.router import router as package_router
+from app.customers.router import router as customer_router
 from app.config import get_settings
 from app.database import Base, engine
 
@@ -21,6 +22,7 @@ from app.auth import login_history_models  # noqa: F401
 from app.routers import models as router_models  # noqa: F401
 from app.routers import status_history_models  # noqa: F401
 from app.packages import models as package_models  # noqa: F401
+from app.customers import models as customer_models  # noqa: F401
 
 settings = get_settings()
 
@@ -93,6 +95,7 @@ app.include_router(auth_router)
 app.include_router(isp_router)
 app.include_router(router_router)
 app.include_router(package_router)
+app.include_router(customer_router)
 
 
 # Start router status monitor background task
