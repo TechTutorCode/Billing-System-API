@@ -98,6 +98,23 @@ class CustomerUpdate(BaseModel):
         }
 
 
+class ChangePasswordRequest(BaseModel):
+    """Schema for customer password change request."""
+
+    current_password: str = Field(..., min_length=1, description="Current password")
+    new_password: str = Field(..., min_length=6, description="New password (minimum 6 characters)")
+
+    class Config:
+        """Pydantic config."""
+
+        json_schema_extra = {
+            "example": {
+                "current_password": "cust001",
+                "new_password": "newSecurePassword123"
+            }
+        }
+
+
 class CustomerResponse(BaseModel):
     """Schema for customer response."""
 

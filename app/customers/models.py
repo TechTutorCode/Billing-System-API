@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timezone
 from enum import Enum
 
-from sqlalchemy import Column, DateTime, Enum as SQLEnum, ForeignKey, String
+from sqlalchemy import Column, DateTime, Enum as SQLEnum, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -38,6 +38,7 @@ class Customer(Base):
     phone = Column(String, nullable=True, index=True)
     id_number = Column(String, nullable=True)
     address = Column(String, nullable=True)
+    password_hash = Column(Text, nullable=False)
     status = Column(
         SQLEnum(CustomerStatus, name="customer_status"),
         default=CustomerStatus.ACTIVE.value,

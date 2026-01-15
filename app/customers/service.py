@@ -9,6 +9,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_
 
+from app.auth.utils import hash_password, verify_password
 from app.customers.models import Customer, CustomerStatus
 
 logger = logging.getLogger(__name__)
@@ -88,10 +89,14 @@ class CustomerService:
         # Generate unique account number
         account_number = CustomerService.generate_account_number(db)
 
+        # Generate password hash (default password is the account number)
+        password_hash = hash_password(account_number)
+
         # Create customer
         customer = Customer(
             isp_id=isp_id,
             account_number=account_number,
+            password_hash=password_hash,
             **customer_data,
             status=CustomerStatus.ACTIVE.value
         )
@@ -292,6 +297,55 @@ class CustomerService:
         db.refresh(customer)
 
         logger.info(f"Terminated customer {customer_id}")
+        return customer
+
+    @staticmethod
+    def change_customer_password(
+        db: Session,
+        customer_id: UUID,
+        isp_id: UUID,
+        current_password: str,
+        new_password: str
+    ) -> Customer:
+        """
+        Change customer password.
+
+        Args:
+            db: Database session
+            customer_id: Customer ID
+            isp_id: ISP ID (for ownership verification)
+            current_password: Current password
+            new_password: New password
+
+        Returns:
+            Updated Customer instance
+
+        Raises:
+            HTTPException: If customer not found or password is incorrect
+        """
+        customer = CustomerService.get_customer_by_id(db, customer_id, isp_id)
+
+        # Verify current password
+        if not verify_password(current_password, customer.password_hash):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Current password is incorrect"
+            )
+
+        # Validate new password
+        if not new_password or len(new_password) < 6:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="New password must be at least 6 characters long"
+            )
+
+        # Update password
+        customer.password_hash = hash_password(new_password)
+        customer.updated_at = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(customer)
+
+        logger.info(f"Password changed for customer {customer_id}")
         return customer
 
 

@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.auth.dependencies import get_current_isp
 from app.database import get_db
 from app.isps.models import ISPDetails
-from app.customers.schemas import CustomerCreate, CustomerResponse, CustomerUpdate
+from app.customers.schemas import ChangePasswordRequest, CustomerCreate, CustomerResponse, CustomerUpdate
 from app.customers.service import customer_service
 
 router = APIRouter(prefix="/api/customers", tags=["Customers"])
@@ -293,5 +293,56 @@ def delete_customer(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete customer: {str(e)}"
+        )
+
+
+@router.post(
+    "/{customer_id}/change-password",
+    status_code=status.HTTP_200_OK,
+    summary="Change Customer Password",
+    description="Change customer password. Requires current password verification."
+)
+def change_customer_password(
+    customer_id: str,
+    request: ChangePasswordRequest,
+    current_isp: ISPDetails = Depends(get_current_isp),
+    db: Session = Depends(get_db)
+):
+    """
+    Change customer password.
+
+    This endpoint:
+    - Verifies the current password
+    - Updates to the new password
+    - Only accessible by customer owner (ISP)
+    - Requires valid JWT access token
+    """
+    try:
+        customer_uuid = UUID(customer_id)
+        customer = customer_service.change_customer_password(
+            db=db,
+            customer_id=customer_uuid,
+            isp_id=current_isp.id,
+            current_password=request.current_password,
+            new_password=request.new_password
+        )
+
+        return {
+            "status_code": status.HTTP_200_OK,
+            "message": "Password changed successfully",
+            "customer_id": str(customer.id),
+            "account_number": customer.account_number
+        }
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid customer ID format"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to change password: {str(e)}"
         )
 
