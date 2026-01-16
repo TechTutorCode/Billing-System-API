@@ -3,8 +3,6 @@
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-# Remove CORSMiddleware import since we won't use it
-# from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.auth.routes import router as auth_router
@@ -43,98 +41,60 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-# ========== REMOVE THIS MIDDLEWARE ==========
-# This middleware adds CORS headers which cause duplicates
-# @app.middleware("http")
-# async def add_security_headers(request: Request, call_next):
-#     response = await call_next(request)
-#     response.headers["Access-Control-Allow-Origin"] = "*"
-#     return response
-
-# ========== REMOVE CORS MIDDLEWARE ==========
-# Nginx will handle all CORS headers, so remove this entirely
-# app.add_middleware(
-#     CORSMiddleware,
-#     allow_origins=["*"],  # Allow all origins for now
-#     allow_credentials=True,  # Change this to True
-#     allow_methods=["*"],  # Allow all methods
-#     allow_headers=["*"],  # Allow all headers
-#     expose_headers=["*"],  # Expose all headers
-# )
-
-# Optional: Add middleware to ensure no CORS headers are added by FastAPI
+# ==========================
+# Dynamic CORS Middleware
+# ==========================
 @app.middleware("http")
-async def remove_cors_headers_from_backend(request: Request, call_next):
-    """Middleware to ensure FastAPI doesn't add CORS headers."""
+async def dynamic_cors_middleware(request: Request, call_next):
+    """
+    Allow requests from any origin, including credentials (cookies / JWT),
+    by dynamically setting Access-Control-Allow-Origin.
+    """
     response = await call_next(request)
-    # Remove any CORS headers that might be added by FastAPI or other middleware
-    cors_headers_to_remove = [
-        "access-control-allow-origin",
-        "access-control-allow-methods",
-        "access-control-allow-headers",
-        "access-control-expose-headers",
-        "access-control-allow-credentials",
-        "access-control-max-age"
-    ]
-    
-    for header in cors_headers_to_remove:
-        if header in response.headers:
-            del response.headers[header]
-    
+    origin = request.headers.get("origin")
+    if origin:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,DELETE,OPTIONS,PATCH"
+        response.headers["Access-Control-Allow-Headers"] = "Authorization,Content-Type,Accept,Origin,User-Agent"
     return response
 
-
+# ==========================
+# Exception handlers
+# ==========================
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
-    """Handle HTTP exceptions with status_code and message in response."""
     message = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
-    
     return JSONResponse(
         status_code=exc.status_code,
-        content={
-            "status_code": exc.status_code,
-            "message": message
-        }
+        content={"status_code": exc.status_code, "message": message}
     )
-
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    """Handle validation errors with status_code and message in response."""
-    # Format validation errors into a readable message
     errors = exc.errors()
     error_messages = []
     for error in errors:
         field = " -> ".join(str(loc) for loc in error.get("loc", []))
         error_msg = error.get("msg", "Validation error")
         error_messages.append(f"{field}: {error_msg}")
-    
     message = "Validation error: " + "; ".join(error_messages) if error_messages else "Validation error"
-    
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        content={
-            "status_code": status.HTTP_422_UNPROCESSABLE_ENTITY,
-            "message": message
-        }
+        content={"status_code": status.HTTP_422_UNPROCESSABLE_ENTITY, "message": message}
     )
-
 
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception):
-    """Handle general exceptions with status_code and message in response."""
     message = str(exc) if settings.DEBUG else "An internal server error occurred"
-    
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content={
-            "status_code": status.HTTP_500_INTERNAL_SERVER_ERROR,
-            "message": message
-        }
+        content={"status_code": status.HTTP_500_INTERNAL_SERVER_ERROR, "message": message}
     )
 
-
-# Include routers
+# ==========================
+# Routers
+# ==========================
 app.include_router(auth_router)
 app.include_router(isp_router)
 app.include_router(router_router)
@@ -142,23 +102,23 @@ app.include_router(package_router)
 app.include_router(customer_router)
 app.include_router(subscription_router)
 
-
-# Start router status monitor background task
+# ==========================
+# Startup Tasks
+# ==========================
 @app.on_event("startup")
 async def startup_event():
-    """Start background tasks on application startup."""
     import asyncio
     import logging
-    
+
     from app.database import SessionLocal
     from app.packages.service import package_service
-    
+
     logger = logging.getLogger(__name__)
     print("=" * 80)
     print("[STARTUP] Starting application startup tasks...")
     print("=" * 80)
     logger.info("Starting application startup tasks...")
-    
+
     # Seed package types
     db = SessionLocal()
     try:
@@ -170,47 +130,41 @@ async def startup_event():
         print(f"[STARTUP] Warning: Failed to seed package types: {str(e)}")
     finally:
         db.close()
-    
+
     from app.routers.status_monitor import update_router_statuses
-    
+
     async def monitor_loop():
         """Background task to monitor router statuses."""
         print("[MONITOR] Router status monitor loop started. Will run every 2 minutes.")
         logger.info("Router status monitor loop started. Will run every 2 minutes.")
         while True:
             try:
-                # Run in thread pool to avoid blocking
                 loop = asyncio.get_event_loop()
                 print("[MONITOR] Starting monitoring cycle...")
                 await loop.run_in_executor(None, update_router_statuses)
-                # Run every 2 minutes (120 seconds)
                 print("[MONITOR] Monitoring cycle completed. Waiting 2 minutes before next check...")
-                logger.debug("Waiting 2 minutes before next status check...")
                 await asyncio.sleep(120)
             except Exception as e:
                 print(f"[MONITOR] ❌ Error in status monitor loop: {str(e)}")
                 logger.error(f"Error in status monitor loop: {str(e)}", exc_info=True)
-                print("[MONITOR] Waiting 60 seconds before retrying...")
-                logger.info("Waiting 60 seconds before retrying...")
                 await asyncio.sleep(60)
-    
-    # Start background task
+
     asyncio.create_task(monitor_loop())
     print("[STARTUP] Router status monitor background task started successfully")
-    
+
     # Start subscription expiry monitor
     from app.subscriptions.expiry_monitor import start_expiry_monitor
     await start_expiry_monitor()
     print("[STARTUP] Subscription expiry monitor background task started successfully")
-    
     print("=" * 80)
     logger.info("Router status monitor background task started successfully")
     logger.info("Subscription expiry monitor background task started successfully")
 
-
+# ==========================
+# Root & Health
+# ==========================
 @app.get("/", tags=["root"])
 def root():
-    """Root endpoint."""
     return {
         "status_code": status.HTTP_200_OK,
         "message": "SaaS Billing System API",
@@ -220,7 +174,6 @@ def root():
 
 @app.get("/health", tags=["health"])
 def health_check():
-    """Health check endpoint."""
     return {
         "status_code": status.HTTP_200_OK,
         "message": "healthy"
