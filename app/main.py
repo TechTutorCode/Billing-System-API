@@ -2,7 +2,7 @@
 
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.auth.routes import router as auth_router
@@ -49,14 +49,44 @@ async def dynamic_cors_middleware(request: Request, call_next):
     """
     Allow requests from any origin, including credentials (cookies / JWT),
     by dynamically setting Access-Control-Allow-Origin.
+    Handles OPTIONS preflight requests explicitly.
     """
-    response = await call_next(request)
     origin = request.headers.get("origin")
+    
+    # Handle preflight OPTIONS request
+    if request.method == "OPTIONS":
+        response = Response()
+        if origin:
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Access-Control-Allow-Credentials"] = "true"
+            response.headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,DELETE,OPTIONS,PATCH,HEAD"
+            response.headers["Access-Control-Allow-Headers"] = "Authorization,Content-Type,Accept,Origin,User-Agent,X-Requested-With"
+            response.headers["Access-Control-Max-Age"] = "3600"
+        else:
+            # If no origin header, allow all origins
+            response.headers["Access-Control-Allow-Origin"] = "*"
+            response.headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,DELETE,OPTIONS,PATCH,HEAD"
+            response.headers["Access-Control-Allow-Headers"] = "Authorization,Content-Type,Accept,Origin,User-Agent,X-Requested-With"
+            response.headers["Access-Control-Max-Age"] = "3600"
+        return response
+    
+    # Handle actual request
+    response = await call_next(request)
+    
+    # Add CORS headers to response
     if origin:
         response.headers["Access-Control-Allow-Origin"] = origin
         response.headers["Access-Control-Allow-Credentials"] = "true"
-        response.headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,DELETE,OPTIONS,PATCH"
-        response.headers["Access-Control-Allow-Headers"] = "Authorization,Content-Type,Accept,Origin,User-Agent"
+        response.headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,DELETE,OPTIONS,PATCH,HEAD"
+        response.headers["Access-Control-Allow-Headers"] = "Authorization,Content-Type,Accept,Origin,User-Agent,X-Requested-With"
+        response.headers["Access-Control-Expose-Headers"] = "*"
+    else:
+        # If no origin header, allow all origins
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,DELETE,OPTIONS,PATCH,HEAD"
+        response.headers["Access-Control-Allow-Headers"] = "Authorization,Content-Type,Accept,Origin,User-Agent,X-Requested-With"
+        response.headers["Access-Control-Expose-Headers"] = "*"
+    
     return response
 
 # ==========================
@@ -109,16 +139,16 @@ app.include_router(subscription_router)
 async def startup_event():
     import asyncio
     import logging
-
+    
     from app.database import SessionLocal
     from app.packages.service import package_service
-
+    
     logger = logging.getLogger(__name__)
     print("=" * 80)
     print("[STARTUP] Starting application startup tasks...")
     print("=" * 80)
     logger.info("Starting application startup tasks...")
-
+    
     # Seed package types
     db = SessionLocal()
     try:
@@ -130,9 +160,9 @@ async def startup_event():
         print(f"[STARTUP] Warning: Failed to seed package types: {str(e)}")
     finally:
         db.close()
-
+    
     from app.routers.status_monitor import update_router_statuses
-
+    
     async def monitor_loop():
         """Background task to monitor router statuses."""
         print("[MONITOR] Router status monitor loop started. Will run every 2 minutes.")
@@ -148,10 +178,10 @@ async def startup_event():
                 print(f"[MONITOR] ❌ Error in status monitor loop: {str(e)}")
                 logger.error(f"Error in status monitor loop: {str(e)}", exc_info=True)
                 await asyncio.sleep(60)
-
+    
     asyncio.create_task(monitor_loop())
     print("[STARTUP] Router status monitor background task started successfully")
-
+    
     # Start subscription expiry monitor
     from app.subscriptions.expiry_monitor import start_expiry_monitor
     await start_expiry_monitor()
