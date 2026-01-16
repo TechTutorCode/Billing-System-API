@@ -3,7 +3,8 @@
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from fastapi.middleware.cors import CORSMiddleware
+# Remove CORSMiddleware import since we won't use it
+# from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.auth.routes import router as auth_router
@@ -42,22 +43,45 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-# Add security headers middleware at the very beginning
-@app.middleware("http")
-async def add_security_headers(request: Request, call_next):
-    response = await call_next(request)
-    response.headers["Access-Control-Allow-Origin"] = "*"
-    return response
+# ========== REMOVE THIS MIDDLEWARE ==========
+# This middleware adds CORS headers which cause duplicates
+# @app.middleware("http")
+# async def add_security_headers(request: Request, call_next):
+#     response = await call_next(request)
+#     response.headers["Access-Control-Allow-Origin"] = "*"
+#     return response
 
-# Configure CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for now
-    allow_credentials=True,  # Change this to True
-    allow_methods=["*"],  # Allow all methods
-    allow_headers=["*"],  # Allow all headers
-    expose_headers=["*"],  # Expose all headers
-)
+# ========== REMOVE CORS MIDDLEWARE ==========
+# Nginx will handle all CORS headers, so remove this entirely
+# app.add_middleware(
+#     CORSMiddleware,
+#     allow_origins=["*"],  # Allow all origins for now
+#     allow_credentials=True,  # Change this to True
+#     allow_methods=["*"],  # Allow all methods
+#     allow_headers=["*"],  # Allow all headers
+#     expose_headers=["*"],  # Expose all headers
+# )
+
+# Optional: Add middleware to ensure no CORS headers are added by FastAPI
+@app.middleware("http")
+async def remove_cors_headers_from_backend(request: Request, call_next):
+    """Middleware to ensure FastAPI doesn't add CORS headers."""
+    response = await call_next(request)
+    # Remove any CORS headers that might be added by FastAPI or other middleware
+    cors_headers_to_remove = [
+        "access-control-allow-origin",
+        "access-control-allow-methods",
+        "access-control-allow-headers",
+        "access-control-expose-headers",
+        "access-control-allow-credentials",
+        "access-control-max-age"
+    ]
+    
+    for header in cors_headers_to_remove:
+        if header in response.headers:
+            del response.headers[header]
+    
+    return response
 
 
 @app.exception_handler(StarletteHTTPException)
@@ -201,4 +225,3 @@ def health_check():
         "status_code": status.HTTP_200_OK,
         "message": "healthy"
     }
-
