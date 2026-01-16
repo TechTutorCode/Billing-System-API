@@ -22,7 +22,7 @@ router = APIRouter(prefix="/api/subscriptions", tags=["Subscriptions"])
 
 
 @router.post(
-    "/",
+    "",
     response_model=SubscriptionResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create Subscription",

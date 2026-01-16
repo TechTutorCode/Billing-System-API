@@ -34,7 +34,7 @@ _router_passwords: Dict[str, str] = {}
 
 
 @router.get(
-    "/",
+    "",
     response_model=List[RouterResponse],
     summary="List Routers",
     description="Get list of all routers for the authenticated ISP."
@@ -85,7 +85,7 @@ def list_routers(
 
 
 @router.post(
-    "/",
+    "",
     response_model=RouterCreateResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create Router",
