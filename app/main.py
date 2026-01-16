@@ -2,7 +2,7 @@
 
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.auth.routes import router as auth_router
@@ -42,48 +42,8 @@ app = FastAPI(
 )
 
 # ==========================
-# Dynamic CORS Middleware
+# Note: CORS is handled by nginx reverse proxy
 # ==========================
-@app.middleware("http")
-async def dynamic_cors_middleware(request: Request, call_next):
-    """
-    Allow requests from any origin, including credentials (cookies / JWT),
-    by dynamically setting Access-Control-Allow-Origin.
-    Handles OPTIONS preflight requests explicitly.
-    Always sets CORS headers on all responses.
-    """
-    origin = request.headers.get("origin") or request.headers.get("Origin")
-    
-    # Handle preflight OPTIONS request
-    if request.method == "OPTIONS":
-        response = Response(status_code=200)
-        # Always set CORS headers for preflight
-        if origin:
-            response.headers["Access-Control-Allow-Origin"] = origin
-            response.headers["Access-Control-Allow-Credentials"] = "true"
-        else:
-            response.headers["Access-Control-Allow-Origin"] = "*"
-        response.headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,DELETE,OPTIONS,PATCH,HEAD"
-        response.headers["Access-Control-Allow-Headers"] = "Authorization,Content-Type,Accept,Origin,User-Agent,X-Requested-With,X-CSRF-Token"
-        response.headers["Access-Control-Max-Age"] = "3600"
-        response.headers["Access-Control-Expose-Headers"] = "*"
-        return response
-    
-    # Handle actual request
-    response = await call_next(request)
-    
-    # Always add CORS headers to response (even for redirects)
-    if origin:
-        response.headers["Access-Control-Allow-Origin"] = origin
-        response.headers["Access-Control-Allow-Credentials"] = "true"
-    else:
-        response.headers["Access-Control-Allow-Origin"] = "*"
-    
-    response.headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,DELETE,OPTIONS,PATCH,HEAD"
-    response.headers["Access-Control-Allow-Headers"] = "Authorization,Content-Type,Accept,Origin,User-Agent,X-Requested-With,X-CSRF-Token"
-    response.headers["Access-Control-Expose-Headers"] = "*"
-    
-    return response
 
 # ==========================
 # Exception handlers
