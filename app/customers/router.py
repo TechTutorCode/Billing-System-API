@@ -16,7 +16,7 @@ router = APIRouter(prefix="/api/customers", tags=["Customers"])
 
 
 @router.post(
-    "/",
+    "",
     response_model=CustomerResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create Customer",
@@ -67,7 +67,7 @@ def create_customer(
 
 
 @router.get(
-    "/",
+    "",
     response_model=List[CustomerResponse],
     summary="List Customers",
     description="Get list of customers with pagination and filters."

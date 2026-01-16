@@ -38,7 +38,8 @@ app = FastAPI(
     description="ISP Registration and Email Verification API",
     version="1.0.0",
     docs_url="/docs",
-    redoc_url="/redoc"
+    redoc_url="/redoc",
+    redirect_slashes=False
 )
 origins = [
 "*"
