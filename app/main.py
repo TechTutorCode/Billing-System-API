@@ -50,42 +50,38 @@ async def dynamic_cors_middleware(request: Request, call_next):
     Allow requests from any origin, including credentials (cookies / JWT),
     by dynamically setting Access-Control-Allow-Origin.
     Handles OPTIONS preflight requests explicitly.
+    Always sets CORS headers on all responses.
     """
-    origin = request.headers.get("origin")
+    origin = request.headers.get("origin") or request.headers.get("Origin")
     
     # Handle preflight OPTIONS request
     if request.method == "OPTIONS":
-        response = Response()
+        response = Response(status_code=200)
+        # Always set CORS headers for preflight
         if origin:
             response.headers["Access-Control-Allow-Origin"] = origin
             response.headers["Access-Control-Allow-Credentials"] = "true"
-            response.headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,DELETE,OPTIONS,PATCH,HEAD"
-            response.headers["Access-Control-Allow-Headers"] = "Authorization,Content-Type,Accept,Origin,User-Agent,X-Requested-With"
-            response.headers["Access-Control-Max-Age"] = "3600"
         else:
-            # If no origin header, allow all origins
             response.headers["Access-Control-Allow-Origin"] = "*"
-            response.headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,DELETE,OPTIONS,PATCH,HEAD"
-            response.headers["Access-Control-Allow-Headers"] = "Authorization,Content-Type,Accept,Origin,User-Agent,X-Requested-With"
-            response.headers["Access-Control-Max-Age"] = "3600"
+        response.headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,DELETE,OPTIONS,PATCH,HEAD"
+        response.headers["Access-Control-Allow-Headers"] = "Authorization,Content-Type,Accept,Origin,User-Agent,X-Requested-With,X-CSRF-Token"
+        response.headers["Access-Control-Max-Age"] = "3600"
+        response.headers["Access-Control-Expose-Headers"] = "*"
         return response
     
     # Handle actual request
     response = await call_next(request)
     
-    # Add CORS headers to response
+    # Always add CORS headers to response (even for redirects)
     if origin:
         response.headers["Access-Control-Allow-Origin"] = origin
         response.headers["Access-Control-Allow-Credentials"] = "true"
-        response.headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,DELETE,OPTIONS,PATCH,HEAD"
-        response.headers["Access-Control-Allow-Headers"] = "Authorization,Content-Type,Accept,Origin,User-Agent,X-Requested-With"
-        response.headers["Access-Control-Expose-Headers"] = "*"
     else:
-        # If no origin header, allow all origins
         response.headers["Access-Control-Allow-Origin"] = "*"
-        response.headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,DELETE,OPTIONS,PATCH,HEAD"
-        response.headers["Access-Control-Allow-Headers"] = "Authorization,Content-Type,Accept,Origin,User-Agent,X-Requested-With"
-        response.headers["Access-Control-Expose-Headers"] = "*"
+    
+    response.headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,DELETE,OPTIONS,PATCH,HEAD"
+    response.headers["Access-Control-Allow-Headers"] = "Authorization,Content-Type,Accept,Origin,User-Agent,X-Requested-With,X-CSRF-Token"
+    response.headers["Access-Control-Expose-Headers"] = "*"
     
     return response
 
