@@ -41,25 +41,6 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-# ==========================
-# CORS Middleware (for redirect responses that nginx can't handle)
-# ==========================
-@app.middleware("http")
-async def cors_middleware(request: Request, call_next):
-    """
-    Add CORS headers to all responses, especially redirects.
-    Nginx handles most CORS, but redirect responses from FastAPI need headers too.
-    """
-    response = await call_next(request)
-    
-    # Add CORS headers to all responses (including redirects)
-    origin = request.headers.get("origin") or request.headers.get("Origin") or "*"
-    response.headers["Access-Control-Allow-Origin"] = origin
-    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD"
-    response.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type, Accept, Origin, User-Agent, X-Requested-With, X-CSRF-Token"
-    response.headers["Access-Control-Expose-Headers"] = "*"
-    
-    return response
 
 # ==========================
 # Exception handlers
@@ -111,16 +92,16 @@ app.include_router(subscription_router)
 async def startup_event():
     import asyncio
     import logging
-    
+
     from app.database import SessionLocal
     from app.packages.service import package_service
-    
+
     logger = logging.getLogger(__name__)
     print("=" * 80)
     print("[STARTUP] Starting application startup tasks...")
     print("=" * 80)
     logger.info("Starting application startup tasks...")
-    
+
     # Seed package types
     db = SessionLocal()
     try:
@@ -132,9 +113,9 @@ async def startup_event():
         print(f"[STARTUP] Warning: Failed to seed package types: {str(e)}")
     finally:
         db.close()
-    
+
     from app.routers.status_monitor import update_router_statuses
-    
+
     async def monitor_loop():
         """Background task to monitor router statuses."""
         print("[MONITOR] Router status monitor loop started. Will run every 2 minutes.")
@@ -150,10 +131,10 @@ async def startup_event():
                 print(f"[MONITOR] ❌ Error in status monitor loop: {str(e)}")
                 logger.error(f"Error in status monitor loop: {str(e)}", exc_info=True)
                 await asyncio.sleep(60)
-    
+
     asyncio.create_task(monitor_loop())
     print("[STARTUP] Router status monitor background task started successfully")
-    
+
     # Start subscription expiry monitor
     from app.subscriptions.expiry_monitor import start_expiry_monitor
     await start_expiry_monitor()
