@@ -25,7 +25,7 @@ from app.routers import status_history_models  # noqa: F401
 from app.packages import models as package_models  # noqa: F401
 from app.customers import models as customer_models  # noqa: F401
 from app.subscriptions import models as subscription_models  # noqa: F401
-
+from fastapi.middleware.cors import CORSMiddleware
 settings = get_settings()
 
 # Create database tables
