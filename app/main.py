@@ -42,8 +42,24 @@ app = FastAPI(
 )
 
 # ==========================
-# Note: CORS is handled by nginx reverse proxy
+# CORS Middleware (for redirect responses that nginx can't handle)
 # ==========================
+@app.middleware("http")
+async def cors_middleware(request: Request, call_next):
+    """
+    Add CORS headers to all responses, especially redirects.
+    Nginx handles most CORS, but redirect responses from FastAPI need headers too.
+    """
+    response = await call_next(request)
+    
+    # Add CORS headers to all responses (including redirects)
+    origin = request.headers.get("origin") or request.headers.get("Origin") or "*"
+    response.headers["Access-Control-Allow-Origin"] = origin
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD"
+    response.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type, Accept, Origin, User-Agent, X-Requested-With, X-CSRF-Token"
+    response.headers["Access-Control-Expose-Headers"] = "*"
+    
+    return response
 
 # ==========================
 # Exception handlers
