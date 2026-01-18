@@ -129,30 +129,23 @@ async def startup_event():
 
     async def monitor_loop():
         """Background task to monitor router statuses."""
-        print("[MONITOR] Router status monitor loop started. Will run every 2 minutes.")
-        logger.info("Router status monitor loop started. Will run every 2 minutes.")
+        # logger.info("Router status monitor loop started. Will run every 10 seconds.")
         while True:
             try:
                 loop = asyncio.get_event_loop()
-                print("[MONITOR] Starting monitoring cycle...")
                 await loop.run_in_executor(None, update_router_statuses)
-                print("[MONITOR] Monitoring cycle completed. Waiting 2 minutes before next check...")
-                await asyncio.sleep(120)
+                await asyncio.sleep(10)
             except Exception as e:
-                print(f"[MONITOR] ❌ Error in status monitor loop: {str(e)}")
                 logger.error(f"Error in status monitor loop: {str(e)}", exc_info=True)
                 await asyncio.sleep(60)
 
     asyncio.create_task(monitor_loop())
-    print("[STARTUP] Router status monitor background task started successfully")
+    # logger.info("Router status monitor background task started successfully")
 
     # Start subscription expiry monitor
     from app.subscriptions.expiry_monitor import start_expiry_monitor
     await start_expiry_monitor()
-    print("[STARTUP] Subscription expiry monitor background task started successfully")
-    print("=" * 80)
-    logger.info("Router status monitor background task started successfully")
-    logger.info("Subscription expiry monitor background task started successfully")
+    # logger.info("Subscription expiry monitor background task started successfully")
 
 # ==========================
 # Root & Health
