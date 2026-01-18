@@ -21,7 +21,7 @@ from app.auth.services import auth_service
 from app.database import get_db
 from app.isps.models import ISPDetails
 
-router = APIRouter(prefix="/api/auth", tags=["authentication"])
+router = APIRouter(prefix="/auth", tags=["authentication"])
 
 
 @router.post(
