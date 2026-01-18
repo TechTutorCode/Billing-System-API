@@ -14,7 +14,7 @@ class RouterStatusHistory(Base):
     """Router status history table model.
     
     Records the status of each router for every monitoring cycle.
-    This allows tracking status changes over time.
+    This allows tracking status changes over time .
     """
 
     __tablename__ = "Router_Status_History"
