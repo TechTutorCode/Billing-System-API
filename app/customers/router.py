@@ -12,7 +12,7 @@ from app.isps.models import ISPDetails
 from app.customers.schemas import ChangePasswordRequest, CustomerCreate, CustomerResponse, CustomerUpdate
 from app.customers.service import customer_service
 
-router = APIRouter(prefix="/api/customers", tags=["Customers"])
+router = APIRouter(prefix="/customers", tags=["Customers"])
 
 
 @router.post(

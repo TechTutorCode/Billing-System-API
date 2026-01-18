@@ -18,7 +18,7 @@ from app.subscriptions.schemas import (
 )
 from app.subscriptions.service import subscription_service
 
-router = APIRouter(prefix="/api/subscriptions", tags=["Subscriptions"])
+router = APIRouter(prefix="/subscriptions", tags=["Subscriptions"])
 
 
 @router.post(

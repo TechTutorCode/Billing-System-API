@@ -16,7 +16,7 @@ from app.isps.schemas import (
 )
 from app.isps.services import isp_service
 
-router = APIRouter(prefix="/api/isps", tags=["ISP Profile"])
+router = APIRouter(prefix="/isps", tags=["ISP Profile"])
 
 
 @router.get(

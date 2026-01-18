@@ -23,7 +23,7 @@ from app.routers.schemas import (
     )
 from app.routers.services import router_service
 
-router = APIRouter(prefix="/api/routers", tags=["Routers"])
+router = APIRouter(prefix="/routers", tags=["Routers"])
 
 settings = get_settings()
 

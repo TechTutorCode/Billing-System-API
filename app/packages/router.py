@@ -19,7 +19,7 @@ from app.packages.schemas import (
 )
 from app.packages.service import package_service
 
-router = APIRouter(prefix="/api", tags=["Packages"])
+router = APIRouter(prefix="/packages", tags=["Packages"])
 
 
 @router.get(
