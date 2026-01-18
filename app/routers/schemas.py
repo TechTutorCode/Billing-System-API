@@ -139,6 +139,7 @@ class RouterStatusHistoryResponse(BaseModel):
     api_port: int
     mikrotik_api_accessible: bool
     connected_since: Optional[str] = None
+    last_seen: Optional[str] = None
     recorded_at: str
 
     class Config:

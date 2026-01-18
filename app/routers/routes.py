@@ -441,6 +441,7 @@ def get_router_status_history(
                     api_port=h.api_port,
                     mikrotik_api_accessible=h.mikrotik_api_accessible,
                     connected_since=h.connected_since.isoformat() if h.connected_since else None,
+                    last_seen=h.last_seen.isoformat() if h.last_seen else None,
                     recorded_at=h.recorded_at.isoformat() if h.recorded_at else ""
                 )
                 for h in history_records

@@ -471,16 +471,38 @@ def update_router_statuses():
                 # Record status history for this cycle
                 # Refresh router to get latest status and vpn_ip
                 db.refresh(router)
+                
+                # Determine last_seen based on status
+                last_seen = None
+                if final_status == RouterStatus.ONLINE.value:
+                    # If status is online, set last_seen to current time
+                    last_seen = datetime.now(timezone.utc)
+                else:
+                    # If status is not online, find the last history record where status was "online"
+                    last_online_history = (
+                        db.query(RouterStatusHistory)
+                        .filter(
+                            RouterStatusHistory.router_id == router.id,
+                            RouterStatusHistory.status == RouterStatus.ONLINE.value
+                        )
+                        .order_by(RouterStatusHistory.recorded_at.desc())
+                        .first()
+                    )
+                    if last_online_history and last_online_history.last_seen:
+                        last_seen = last_online_history.last_seen
+                    # If router has never been online, last_seen remains None
+                
                 status_history = RouterStatusHistory(
                     router_id=router.id,
                     status=router.status,
                     vpn_ip=router.vpn_ip,
                     api_port=router.api_port,
                     mikrotik_api_accessible=mikrotik_api_accessible,
-                    connected_since=connected_since_dt
+                    connected_since=connected_since_dt,
+                    last_seen=last_seen
                 )
                 db.add(status_history)
-                logger.debug(f"  → Recorded status history: {router.status} at {status_history.recorded_at}, Connected Since: {connected_since_dt}")
+                logger.debug(f"  → Recorded status history: {router.status} at {status_history.recorded_at}, Connected Since: {connected_since_dt}, Last Seen: {last_seen}")
 
             except Exception as e:
                 logger.error(f"Error updating status for router {router.id}: {str(e)}", exc_info=True)

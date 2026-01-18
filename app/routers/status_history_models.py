@@ -31,6 +31,7 @@ class RouterStatusHistory(Base):
     api_port = Column(Integer, default=8728, nullable=False)
     mikrotik_api_accessible = Column(Boolean, default=False, nullable=False)
     connected_since = Column(DateTime(timezone=True), nullable=True)
+    last_seen = Column(DateTime(timezone=True), nullable=True)
     recorded_at = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
@@ -42,5 +43,5 @@ class RouterStatusHistory(Base):
     router = relationship("Router", backref="status_history")
 
     def __repr__(self):
-        return f"<RouterStatusHistory(id={self.id}, router_id={self.router_id}, status={self.status}, recorded_at={self.recorded_at})>"
+        return f"<RouterStatusHistory(id={self.id}, router_id={self.router_id}, status={self.status}, last_seen={self.last_seen}, recorded_at={self.recorded_at})>"
 
