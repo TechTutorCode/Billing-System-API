@@ -268,7 +268,7 @@ def update_package(
 
 
 @router.patch(
-    "/packages/{package_id}/disable",
+    "/{package_id}/disable",
     response_model=PackageResponse,
     summary="Disable Package",
     description="Disable a service package (soft delete)."
