@@ -56,7 +56,7 @@ def list_package_types(db: Session = Depends(get_db)):
 
 
 @router.post(
-    "/packages",
+    "",
     response_model=PackageResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create Package",
@@ -195,7 +195,7 @@ def list_packages_by_router(
 
 
 @router.put(
-    "/packages/{package_id}",
+    "/{package_id}",
     response_model=PackageResponse,
     summary="Update Package",
     description="Update an existing service package."
@@ -337,7 +337,7 @@ def disable_package(
 
 
 @router.patch(
-    "/packages/{package_id}/enable",
+    "/{package_id}/enable",
     response_model=PackageResponse,
     summary="Enable Package",
     description="Enable a disabled service package."
@@ -406,7 +406,7 @@ def enable_package(
 
 
 @router.post(
-    "/packages/{package_id}/sync",
+    "/{package_id}/sync",
     response_model=PackageSyncResponse,
     status_code=status.HTTP_200_OK,
     summary="Sync Package to MikroTik",
