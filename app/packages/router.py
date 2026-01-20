@@ -431,7 +431,7 @@ def sync_package_to_mikrotik(
     - Valid JWT access token
     - Package must belong to ISP's router
     - Router must be active and have VPN IP
-    - MikroTik API password (if not stored)
+    - MikroTik API password configured in router settings
     """
     try:
         package_uuid = UUID(package_id)

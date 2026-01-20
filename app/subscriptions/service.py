@@ -280,7 +280,7 @@ class SubscriptionService:
             db: Database session
             subscription_id: Subscription ID
             isp_id: ISP ID (for ownership verification)
-            api_password: MikroTik API password (if not stored)
+            api_password: MikroTik API password (optional, falls back to stored password)
 
         Returns:
             Updated Subscription instance
@@ -319,19 +319,17 @@ class SubscriptionService:
                 detail="Package has not been synced to MikroTik. Please sync the package first."
             )
 
-        # Get API credentials
+        # Get API credentials from database (stored in plain text)
         api_username = router.mikrotik_api_username or "admin"
-        if api_password:
+        if router.mikrotik_api_password:
+            api_password_plain = router.mikrotik_api_password
+        elif api_password:
+            # Fallback to provided password if not stored (for backward compatibility)
             api_password_plain = api_password
-        elif router.mikrotik_api_password_encrypted:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="MikroTik API password required. Please provide it in the request body."
-            )
         else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="MikroTik API password not configured. Please provide it in the request body."
+                detail="MikroTik API password not configured. Please configure it in router settings."
             )
 
         connection = None
@@ -424,7 +422,7 @@ class SubscriptionService:
             db: Database session
             subscription_id: Subscription ID
             isp_id: ISP ID (for ownership verification)
-            api_password: MikroTik API password (if not stored)
+            api_password: MikroTik API password (optional, falls back to stored password)
 
         Returns:
             Updated Subscription instance
@@ -448,19 +446,17 @@ class SubscriptionService:
                 detail="Router not available"
             )
 
-        # Get API credentials
+        # Get API credentials from database (stored in plain text)
         api_username = router.mikrotik_api_username or "admin"
-        if api_password:
+        if router.mikrotik_api_password:
+            api_password_plain = router.mikrotik_api_password
+        elif api_password:
+            # Fallback to provided password if not stored (for backward compatibility)
             api_password_plain = api_password
-        elif router.mikrotik_api_password_encrypted:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="MikroTik API password required. Please provide it in the request body."
-            )
         else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="MikroTik API password not configured. Please provide it in the request body."
+                detail="MikroTik API password not configured. Please configure it in router settings."
             )
 
         connection = None
@@ -521,7 +517,7 @@ class SubscriptionService:
             db: Database session
             subscription_id: Subscription ID
             isp_id: ISP ID (for ownership verification)
-            api_password: MikroTik API password (if not stored)
+            api_password: MikroTik API password (optional, falls back to stored password)
 
         Returns:
             Updated Subscription instance
@@ -545,19 +541,17 @@ class SubscriptionService:
                 detail="Router not available"
             )
 
-        # Get API credentials
+        # Get API credentials from database (stored in plain text)
         api_username = router.mikrotik_api_username or "admin"
-        if api_password:
+        if router.mikrotik_api_password:
+            api_password_plain = router.mikrotik_api_password
+        elif api_password:
+            # Fallback to provided password if not stored (for backward compatibility)
             api_password_plain = api_password
-        elif router.mikrotik_api_password_encrypted:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="MikroTik API password required. Please provide it in the request body."
-            )
         else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="MikroTik API password not configured. Please provide it in the request body."
+                detail="MikroTik API password not configured. Please configure it in router settings."
             )
 
         connection = None
@@ -618,7 +612,7 @@ class SubscriptionService:
             db: Database session
             subscription_id: Subscription ID
             isp_id: ISP ID (for ownership verification)
-            api_password: MikroTik API password (if not stored)
+            api_password: MikroTik API password (optional, falls back to stored password)
 
         Returns:
             Updated Subscription instance
@@ -645,19 +639,17 @@ class SubscriptionService:
             db.refresh(subscription)
             return subscription
 
-        # Get API credentials
+        # Get API credentials from database (stored in plain text)
         api_username = router.mikrotik_api_username or "admin"
-        if api_password:
+        if router.mikrotik_api_password:
+            api_password_plain = router.mikrotik_api_password
+        elif api_password:
+            # Fallback to provided password if not stored (for backward compatibility)
             api_password_plain = api_password
-        elif router.mikrotik_api_password_encrypted:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="MikroTik API password required. Please provide it in the request body."
-            )
         else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="MikroTik API password not configured. Please provide it in the request body."
+                detail="MikroTik API password not configured. Please configure it in router settings."
             )
 
         connection = None
@@ -738,16 +730,12 @@ class SubscriptionService:
                 if router and router.vpn_ip:
                     # Get API credentials
                     api_username = router.mikrotik_api_username or "admin"
-                    # For background tasks, we can't prompt for password
                     # Skip if password not available
-                    if not router.mikrotik_api_password_encrypted:
+                    if not router.mikrotik_api_password:
                         logger.warning(f"Cannot expire subscription {subscription.id}: API password not configured")
                         continue
                     
-                    # Note: In production, you should decrypt the password here
-                    # For now, skip if password is encrypted (can't decrypt bcrypt)
-                    logger.warning(f"Cannot expire subscription {subscription.id}: API password needs to be decrypted")
-                    continue
+                    api_password_plain = router.mikrotik_api_password
 
                     connection = None
                     try:

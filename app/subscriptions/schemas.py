@@ -104,15 +104,13 @@ class SubscriptionResponse(BaseModel):
 class SubscriptionActionRequest(BaseModel):
     """Schema for subscription action request (activate, suspend, resume, terminate)."""
 
-    api_password: Optional[str] = Field(default=None, description="MikroTik API password (if not stored)")
+    api_password: Optional[str] = Field(default=None, description="MikroTik API password (optional, falls back to stored password)")
 
     class Config:
         """Pydantic config."""
 
         json_schema_extra = {
-            "example": {
-                "api_password": "mikrotik_password"
-            }
+            "example": {}
         }
 
 

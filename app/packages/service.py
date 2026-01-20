@@ -360,7 +360,7 @@ class PackageService:
             db: Database session
             package_id: Package ID
             isp_id: ISP ID (for ownership verification)
-            api_password: MikroTik API password (if not stored encrypted)
+            api_password: MikroTik API password (optional, falls back to stored password)
 
         Returns:
             Updated ServicePackage instance
@@ -421,23 +421,16 @@ class PackageService:
         # Connect to MikroTik
         api_username = router.mikrotik_api_username or "admin"
         
-        # Get API password - try provided, then stored (if unencrypted), then raise error
-        # Note: In production, you should use symmetric encryption (e.g., Fernet) for API passwords
-        # since they need to be decrypted, unlike VPN passwords which use bcrypt (one-way hash)
-        if api_password:
+        # Get API password from database (stored in plain text)
+        if router.mikrotik_api_password:
+            api_password_plain = router.mikrotik_api_password
+        elif api_password:
+            # Fallback to provided password if not stored (for backward compatibility)
             api_password_plain = api_password
-        elif router.mikrotik_api_password_encrypted:
-            # If stored encrypted, we can't decrypt bcrypt hashes
-            # For now, require password to be provided in request
-            # TODO: Implement symmetric encryption for API passwords
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="MikroTik API password required. Please provide it in the request body."
-            )
         else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="MikroTik API password not configured. Please provide it in the request body."
+                detail="MikroTik API password not configured. Please configure it in router settings."
             )
 
         connection = None

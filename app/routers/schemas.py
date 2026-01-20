@@ -9,7 +9,7 @@ class RouterCreateRequest(BaseModel):
 
     name: str = Field(..., min_length=1, max_length=255, description="Router name")
     mikrotik_api_username: Optional[str] = Field(default="admin", min_length=1, max_length=255, description="MikroTik API username (default: admin)")
-    mikrotik_api_password: Optional[str] = Field(default=None, min_length=1, description="MikroTik API password (will be encrypted)")
+    mikrotik_api_password: Optional[str] = Field(default=None, min_length=1, description="MikroTik API password (stored in plain text for API connections)")
 
     class Config:
         """Pydantic config."""
@@ -63,7 +63,7 @@ class RouterUpdateRequest(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=255, description="Router name")
     api_port: Optional[int] = Field(default=None, gt=0, le=65535, description="MikroTik API port (default: 8728)")
     mikrotik_api_username: Optional[str] = Field(default=None, min_length=1, max_length=255, description="MikroTik API username")
-    mikrotik_api_password: Optional[str] = Field(default=None, min_length=1, description="MikroTik API password (will be encrypted)")
+    mikrotik_api_password: Optional[str] = Field(default=None, min_length=1, description="MikroTik API password (stored in plain text for API connections)")
 
     class Config:
         """Pydantic config."""

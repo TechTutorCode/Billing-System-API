@@ -38,7 +38,7 @@ class Router(Base):
     vpn_ip = Column(String, nullable=True, index=True)
     api_port = Column(Integer, default=8728, nullable=False)
     mikrotik_api_username = Column(String, default="admin", nullable=False)
-    mikrotik_api_password_encrypted = Column(String, nullable=True)
+    mikrotik_api_password = Column(String, nullable=True)
     status = Column(
         String,
         default=RouterStatus.PENDING.value,
