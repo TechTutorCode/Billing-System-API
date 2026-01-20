@@ -211,6 +211,7 @@ def update_package(
 
     This endpoint:
     - Updates package fields (all optional)
+    - Automatically updates MikroTik profile if package was synced and speed/validity fields changed
     - Requires valid JWT access token
     - Validates package ownership
     """

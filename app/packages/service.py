@@ -242,15 +242,91 @@ class PackageService:
         """
         package = PackageService.get_package_by_id(db, package_id, isp_id)
 
+        # Track if MikroTik-relevant fields changed
+        mikrotik_fields_changed = False
+        mikrotik_relevant_fields = ['download_speed', 'upload_speed', 'validity_value', 'validity_unit']
+
         # Update fields
         for key, value in package_data.items():
             if value is not None:
                 setattr(package, key, value)
+                if key in mikrotik_relevant_fields:
+                    mikrotik_fields_changed = True
 
         package.updated_at = datetime.now(timezone.utc)
         db.commit()
         db.refresh(package)
 
+        # Update MikroTik profile if package was synced and relevant fields changed
+        if package.mikrotik_synced and package.mikrotik_profile_name and mikrotik_fields_changed:
+            router = db.query(Router).filter(Router.id == package.router_id).first()
+            if router and router.vpn_ip and router.mikrotik_api_password:
+                # Get package type name
+                package_type = db.query(PackageType).filter(PackageType.id == package.package_type_id).first()
+                if package_type:
+                    package_type_name = package_type.name.lower()
+                    
+                    if package_type_name in ["pppoe", "hotspot", "static"]:
+                        connection = None
+                        try:
+                            # Connect to MikroTik
+                            api_username = router.mikrotik_api_username or "admin"
+                            connection = mikrotik_service.connect(
+                                host=router.vpn_ip,
+                                username=api_username,
+                                password=router.mikrotik_api_password,
+                                port=router.api_port
+                            )
+                            
+                            # Use updated values
+                            download_speed = package.download_speed
+                            upload_speed = package.upload_speed
+                            
+                            # Update profile based on package type
+                            if package_type_name == "pppoe":
+                                session_timeout = PackageService.convert_validity_to_mikrotik_format(
+                                    package.validity_value,
+                                    package.validity_unit
+                                )
+                                mikrotik_service.update_pppoe_profile(
+                                    connection_dict=connection,
+                                    profile_name=package.mikrotik_profile_name,
+                                    download_speed=download_speed,
+                                    upload_speed=upload_speed,
+                                    session_timeout=session_timeout
+                                )
+                            elif package_type_name == "hotspot":
+                                mikrotik_service.update_hotspot_profile(
+                                    connection_dict=connection,
+                                    profile_name=package.mikrotik_profile_name,
+                                    download_speed=download_speed,
+                                    upload_speed=upload_speed
+                                )
+                            elif package_type_name == "static":
+                                mikrotik_service.update_static_queue(
+                                    connection_dict=connection,
+                                    queue_name=package.mikrotik_profile_name,
+                                    download_speed=download_speed,
+                                    upload_speed=upload_speed
+                                )
+                            
+                            logger.info(f"Updated MikroTik profile '{package.mikrotik_profile_name}' for package {package_id}")
+                        except HTTPException as e:
+                            # Log error but don't fail the update
+                            logger.warning(f"Failed to update MikroTik profile for package {package_id}: {str(e.detail)}")
+                        except Exception as e:
+                            # Log error but don't fail the update
+                            logger.warning(f"Failed to update MikroTik profile for package {package_id}: {str(e)}")
+                        finally:
+                            if connection:
+                                try:
+                                    connection_pool = connection.get("pool")
+                                    if connection_pool:
+                                        connection_pool.disconnect()
+                                except Exception as e:
+                                    logger.warning(f"Error closing MikroTik connection: {str(e)}")
+
+        db.refresh(package)
         return package
 
     @staticmethod

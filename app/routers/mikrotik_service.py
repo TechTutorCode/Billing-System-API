@@ -308,6 +308,149 @@ class MikroTikService:
                 detail=f"Failed to remove {package_type} profile: {str(e)}"
             )
 
+    @staticmethod
+    def update_pppoe_profile(
+        connection_dict,
+        profile_name: str,
+        download_speed: int,
+        upload_speed: int,
+        session_timeout: str
+    ) -> None:
+        """
+        Update PPPoE profile on MikroTik router.
+
+        Args:
+            connection_dict: Dictionary with 'pool' and 'api' keys from connect()
+            profile_name: Profile name
+            download_speed: Download speed in Mbps
+            upload_speed: Upload speed in Mbps
+            session_timeout: Session timeout (e.g., "30d", "12h", "90m")
+
+        Raises:
+            HTTPException: If profile update fails
+        """
+        try:
+            api = connection_dict["api"]
+            logger.info(f"Updating PPPoE profile '{profile_name}' with rate-limit {download_speed}M/{upload_speed}M, session-timeout {session_timeout}")
+            resource = api.get_resource("/ppp/profile")
+            
+            # Get existing profile
+            profiles = resource.get(name=profile_name)
+            if not profiles:
+                logger.warning(f"PPPoE profile '{profile_name}' not found, creating new one")
+                resource.add(
+                    name=profile_name,
+                    rate_limit=f"{download_speed}M/{upload_speed}M",
+                    session_timeout=session_timeout
+                )
+            else:
+                # Update existing profile
+                resource.set(
+                    id=profiles[0]["id"],
+                    rate_limit=f"{download_speed}M/{upload_speed}M",
+                    session_timeout=session_timeout
+                )
+            logger.info(f"Successfully updated PPPoE profile '{profile_name}'")
+        except Exception as e:
+            logger.error(f"Failed to update PPPoE profile: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to update PPPoE profile: {str(e)}"
+            )
+
+    @staticmethod
+    def update_hotspot_profile(
+        connection_dict,
+        profile_name: str,
+        download_speed: int,
+        upload_speed: int
+    ) -> None:
+        """
+        Update Hotspot user profile on MikroTik router.
+
+        Args:
+            connection_dict: Dictionary with 'pool' and 'api' keys from connect()
+            profile_name: Profile name
+            download_speed: Download speed in Mbps
+            upload_speed: Upload speed in Mbps
+
+        Raises:
+            HTTPException: If profile update fails
+        """
+        try:
+            api = connection_dict["api"]
+            logger.info(f"Updating Hotspot profile '{profile_name}' with rate-limit {download_speed}M/{upload_speed}M")
+            resource = api.get_resource("/ip/hotspot/user/profile")
+            
+            # Get existing profile
+            profiles = resource.get(name=profile_name)
+            if not profiles:
+                logger.warning(f"Hotspot profile '{profile_name}' not found, creating new one")
+                resource.add(
+                    name=profile_name,
+                    rate_limit=f"{download_speed}M/{upload_speed}M",
+                    shared_users="1"
+                )
+            else:
+                # Update existing profile
+                resource.set(
+                    id=profiles[0]["id"],
+                    rate_limit=f"{download_speed}M/{upload_speed}M"
+                )
+            logger.info(f"Successfully updated Hotspot profile '{profile_name}'")
+        except Exception as e:
+            logger.error(f"Failed to update Hotspot profile: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to update Hotspot profile: {str(e)}"
+            )
+
+    @staticmethod
+    def update_static_queue(
+        connection_dict,
+        queue_name: str,
+        download_speed: int,
+        upload_speed: int
+    ) -> None:
+        """
+        Update simple queue on MikroTik router for static IP packages.
+
+        Args:
+            connection_dict: Dictionary with 'pool' and 'api' keys from connect()
+            queue_name: Queue name
+            download_speed: Download speed in Mbps
+            upload_speed: Upload speed in Mbps
+
+        Raises:
+            HTTPException: If queue update fails
+        """
+        try:
+            api = connection_dict["api"]
+            logger.info(f"Updating static queue '{queue_name}' with max-limit {download_speed}M/{upload_speed}M")
+            resource = api.get_resource("/queue/simple")
+            
+            # Get existing queue
+            queues = resource.get(name=queue_name)
+            if not queues:
+                logger.warning(f"Static queue '{queue_name}' not found, creating new one")
+                resource.add(
+                    name=queue_name,
+                    max_limit=f"{download_speed}M/{upload_speed}M"
+                )
+            else:
+                # Update existing queue
+                resource.set(
+                    id=queues[0]["id"],
+                    max_limit=f"{download_speed}M/{upload_speed}M"
+                )
+            logger.info(f"Successfully updated static queue '{queue_name}'")
+        except Exception as e:
+            logger.error(f"Failed to update static queue: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to update static queue: {str(e)}"
+            )
+
 
 # Global instance
 mikrotik_service = MikroTikService()
