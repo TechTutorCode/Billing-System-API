@@ -297,6 +297,63 @@ def delete_customer(
 
 
 @router.post(
+    "/{customer_id}/activate",
+    response_model=CustomerResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Activate Customer",
+    description="Activate a terminated customer (set status to active)."
+)
+def activate_customer(
+    customer_id: str,
+    current_isp: ISPDetails = Depends(get_current_isp),
+    db: Session = Depends(get_db)
+):
+    """
+    Activate a terminated customer.
+
+    This endpoint:
+    - Sets customer status to 'active'
+    - Only works for terminated customers
+    - Only accessible by customer owner (ISP)
+    - Requires valid JWT access token
+    """
+    try:
+        customer_uuid = UUID(customer_id)
+        customer = customer_service.activate_customer(
+            db=db,
+            customer_id=customer_uuid,
+            isp_id=current_isp.id
+        )
+
+        return CustomerResponse(
+            id=str(customer.id),
+            isp_id=str(customer.isp_id),
+            account_number=customer.account_number,
+            first_name=customer.first_name,
+            last_name=customer.last_name,
+            email=customer.email,
+            phone=customer.phone,
+            id_number=customer.id_number,
+            address=customer.address,
+            status=customer.status,
+            created_at=customer.created_at.isoformat(),
+            updated_at=customer.updated_at.isoformat()
+        )
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid customer ID format"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to activate customer: {str(e)}"
+        )
+
+
+@router.post(
     "/{customer_id}/change-password",
     status_code=status.HTTP_200_OK,
     summary="Change Customer Password",

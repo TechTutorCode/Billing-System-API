@@ -348,6 +348,44 @@ class CustomerService:
         logger.info(f"Password changed for customer {customer_id}")
         return customer
 
+    @staticmethod
+    def activate_customer(
+        db: Session,
+        customer_id: UUID,
+        isp_id: UUID
+    ) -> Customer:
+        """
+        Activate a terminated customer (set status to active).
+
+        Args:
+            db: Database session
+            customer_id: Customer ID
+            isp_id: ISP ID (for ownership verification)
+
+        Returns:
+            Updated Customer instance
+
+        Raises:
+            HTTPException: If customer not found or is not terminated
+        """
+        customer = CustomerService.get_customer_by_id(db, customer_id, isp_id)
+
+        # Check if customer is terminated
+        if customer.status != CustomerStatus.TERMINATED.value:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot activate customer with status '{customer.status}'. Only terminated customers can be activated."
+            )
+
+        # Activate: set status to active
+        customer.status = CustomerStatus.ACTIVE.value
+        customer.updated_at = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(customer)
+
+        logger.info(f"Activated customer {customer_id}")
+        return customer
+
 
 # Global instance
 customer_service = CustomerService()
