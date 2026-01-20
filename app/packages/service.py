@@ -312,6 +312,100 @@ class PackageService:
         return package
 
     @staticmethod
+    def delete_package(
+        db: Session,
+        package_id: UUID,
+        isp_id: UUID,
+        force: bool = False
+    ) -> bool:
+        """
+        Delete a service package permanently.
+
+        Args:
+            db: Database session
+            package_id: Package ID
+            isp_id: ISP ID (for ownership verification)
+            force: If True, delete even if there are active subscriptions
+
+        Returns:
+            True if deletion successful
+
+        Raises:
+            HTTPException: If package not found or has active subscriptions
+        """
+        package = PackageService.get_package_by_id(db, package_id, isp_id)
+
+        # Check for active subscriptions
+        from app.subscriptions.models import Subscription
+        from app.subscriptions.types import SubscriptionStatus
+        
+        active_subscriptions = db.query(Subscription).filter(
+            Subscription.package_id == package_id,
+            Subscription.status.in_([
+                SubscriptionStatus.ACTIVE.value,
+                SubscriptionStatus.PENDING.value,
+                SubscriptionStatus.SUSPENDED.value
+            ])
+        ).count()
+
+        if active_subscriptions > 0 and not force:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot delete package: {active_subscriptions} active subscription(s) are using this package. Use force=true to delete anyway (this will also delete all related subscriptions)."
+            )
+
+        # Remove profile from MikroTik if package was synced
+        if package.mikrotik_synced and package.mikrotik_profile_name:
+            router = db.query(Router).filter(Router.id == package.router_id).first()
+            if router and router.vpn_ip and router.mikrotik_api_password:
+                # Get package type name
+                package_type = db.query(PackageType).filter(PackageType.id == package.package_type_id).first()
+                if package_type:
+                    package_type_name = package_type.name.lower()
+                    
+                    if package_type_name in ["pppoe", "hotspot", "static"]:
+                        connection = None
+                        try:
+                            # Connect to MikroTik
+                            api_username = router.mikrotik_api_username or "admin"
+                            connection = mikrotik_service.connect(
+                                host=router.vpn_ip,
+                                username=api_username,
+                                password=router.mikrotik_api_password,
+                                port=router.api_port
+                            )
+                            
+                            # Remove profile from MikroTik
+                            mikrotik_service.remove_profile(
+                                connection_dict=connection,
+                                profile_name=package.mikrotik_profile_name,
+                                package_type=package_type_name
+                            )
+                            
+                            logger.info(f"Removed MikroTik profile '{package.mikrotik_profile_name}' for package {package_id}")
+                        except HTTPException as e:
+                            # Log error but continue with database deletion
+                            logger.warning(f"Failed to remove MikroTik profile for package {package_id}: {str(e.detail)}")
+                        except Exception as e:
+                            # Log error but continue with database deletion
+                            logger.warning(f"Failed to remove MikroTik profile for package {package_id}: {str(e)}")
+                        finally:
+                            if connection:
+                                try:
+                                    connection_pool = connection.get("pool")
+                                    if connection_pool:
+                                        connection_pool.disconnect()
+                                except Exception as e:
+                                    logger.warning(f"Error closing MikroTik connection: {str(e)}")
+
+        # Delete the package (CASCADE will handle subscriptions)
+        db.delete(package)
+        db.commit()
+
+        logger.info(f"Package {package_id} deleted by ISP {isp_id}")
+        return True
+
+    @staticmethod
     def convert_validity_to_mikrotik_format(validity_value: int, validity_unit: str) -> str:
         """
         Convert validity to MikroTik format.

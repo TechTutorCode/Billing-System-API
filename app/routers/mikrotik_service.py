@@ -257,6 +257,57 @@ class MikroTikService:
                 detail=f"Failed to create static queue: {str(e)}"
             )
 
+    @staticmethod
+    def remove_profile(
+        connection_dict,
+        profile_name: str,
+        package_type: str
+    ) -> None:
+        """
+        Remove profile from MikroTik router.
+
+        Args:
+            connection_dict: Dictionary with 'pool' and 'api' keys from connect()
+            profile_name: Profile name to remove
+            package_type: Package type (pppoe, hotspot, static)
+
+        Raises:
+            HTTPException: If profile removal fails
+        """
+        try:
+            api = connection_dict["api"]
+            
+            if package_type == "pppoe":
+                resource = api.get_resource("/ppp/profile")
+            elif package_type == "hotspot":
+                resource = api.get_resource("/ip/hotspot/user/profile")
+            elif package_type == "static":
+                resource = api.get_resource("/queue/simple")
+            else:
+                logger.error(f"Unknown package type: {package_type}")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Unknown package type: {package_type}"
+                )
+
+            # Check if profile exists
+            profiles = resource.get(name=profile_name)
+            if not profiles:
+                logger.warning(f"Profile '{profile_name}' not found on router, skipping removal")
+                return
+
+            # Remove profile
+            resource.remove(id=profiles[0]["id"])
+            logger.info(f"Successfully removed {package_type} profile '{profile_name}' from router")
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to remove {package_type} profile '{profile_name}': {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to remove {package_type} profile: {str(e)}"
+            )
+
 
 # Global instance
 mikrotik_service = MikroTikService()

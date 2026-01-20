@@ -3,7 +3,7 @@
 from typing import List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_isp
@@ -402,6 +402,59 @@ def enable_package(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to enable package: {str(e)}"
+        )
+
+
+@router.delete(
+    "/{package_id}",
+    status_code=status.HTTP_200_OK,
+    summary="Delete Package",
+    description="Permanently delete a service package. Cannot delete if package has active subscriptions unless force=true."
+)
+def delete_package(
+    package_id: str,
+    force: bool = Query(default=False, description="Force delete even if package has active subscriptions"),
+    current_isp: ISPDetails = Depends(get_current_isp),
+    db: Session = Depends(get_db)
+):
+    """
+    Delete a service package permanently.
+
+    This endpoint:
+    - Permanently deletes the package from the database
+    - Checks for active subscriptions and prevents deletion unless force=true
+    - If force=true, deletes the package and all related subscriptions (CASCADE)
+    - Requires valid JWT access token
+    - Validates package ownership
+
+    Args:
+        package_id: Package ID to delete
+        force: If True, delete even if there are active subscriptions
+    """
+    try:
+        package_uuid = UUID(package_id)
+        package_service.delete_package(
+            db=db,
+            package_id=package_uuid,
+            isp_id=current_isp.id,
+            force=force
+        )
+
+        return {
+            "status_code": status.HTTP_200_OK,
+            "message": "Package deleted successfully"
+        }
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid package ID format"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete package: {str(e)}"
         )
 
 
