@@ -1,0 +1,1 @@
+"""Hotspot management module."""

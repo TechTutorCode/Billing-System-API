@@ -11,6 +11,7 @@ from app.routers.routes import router as router_router
 from app.packages.router import router as package_router
 from app.customers.router import router as customer_router
 from app.subscriptions.router import router as subscription_router
+from app.hotspot.router import router as hotspot_router
 from app.config import get_settings
 from app.database import Base, engine
 
@@ -25,6 +26,7 @@ from app.routers import status_history_models  # noqa: F401
 from app.packages import models as package_models  # noqa: F401
 from app.customers import models as customer_models  # noqa: F401
 from app.subscriptions import models as subscription_models  # noqa: F401
+from app.hotspot import models as hotspot_models  # noqa: F401
 from fastapi.middleware.cors import CORSMiddleware
 settings = get_settings()
 
@@ -95,6 +97,7 @@ app.include_router(router_router)
 app.include_router(package_router)
 app.include_router(customer_router)
 app.include_router(subscription_router)
+app.include_router(hotspot_router)
 
 # ==========================
 # Startup Tasks
@@ -146,6 +149,11 @@ async def startup_event():
     from app.subscriptions.expiry_monitor import start_expiry_monitor
     await start_expiry_monitor()
     # logger.info("Subscription expiry monitor background task started successfully")
+
+    # Start hotspot voucher expiry monitor
+    from app.hotspot.expiry_monitor import start_voucher_expiry_monitor
+    await start_voucher_expiry_monitor()
+    logger.info("Hotspot voucher expiry monitor background task started successfully")
 
 # ==========================
 # Root & Health
