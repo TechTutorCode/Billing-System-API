@@ -14,7 +14,7 @@ from app.subscriptions.router import router as subscription_router
 from app.hotspot.router import router as hotspot_router
 from app.config import get_settings
 from app.database import Base, engine
-
+# ki
 # Import models to ensure they're registered with Base.metadata
 from app.isps import models as isp_models  # noqa: F401
 from app.email_verification import models as email_verification_models  # noqa: F401
