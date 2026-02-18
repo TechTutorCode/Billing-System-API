@@ -17,7 +17,7 @@ class Settings:
         # Database settings (billing application only)
         self.DATABASE_URL: str = os.getenv(
             "DATABASE_URL",
-            "postgresql://user:password@localhost:5432/billing_system"
+            "postgresql://postgres:deno0707@37.60.242.201:5432/billing_system"
         )
 # postgresql://radius_user:strongpassword@37.60.242.201:5432/billing_system
         # RADIUS database (separate PostgreSQL; FreeRADIUS tables only)
