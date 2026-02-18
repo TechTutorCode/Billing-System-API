@@ -1,4 +1,9 @@
-"""Subscription business logic services."""
+"""Subscription business logic services.
+
+Subscription users authenticate via FreeRADIUS. On activate we ensure the user
+exists in radcheck/radreply; on suspend we add Auth-Type Reject; on resume we
+remove it; on terminate we delete the RADIUS user.
+"""
 
 import logging
 from datetime import datetime, timedelta, timezone
@@ -9,8 +14,10 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_
 
+from app.config import get_settings
 from app.customers.models import Customer
 from app.packages.models import ServicePackage
+from app.radius.service import radius_service
 from app.routers.models import Router
 from app.routers.mikrotik_service import mikrotik_service
 from app.subscriptions.mikrotik_actions import subscription_mikrotik_actions
@@ -18,6 +25,7 @@ from app.subscriptions.models import Subscription, SubscriptionStatus, Subscript
 from app.packages.types import ValidityUnit
 
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
 
 class SubscriptionService:
@@ -319,6 +327,28 @@ class SubscriptionService:
                 detail="Package has not been synced to MikroTik. Please sync the package first."
             )
 
+        # Ensure RADIUS user exists and has rate limits in RADIUS DB (MikroTik will auth via FreeRADIUS)
+        password_for_radius = subscription.password or subscription.username
+        try:
+            radius_service.ensure_user(
+                username=subscription.username,
+                password=password_for_radius,
+                groupname=settings.RADIUS_DEFAULT_GROUP or None,
+            )
+            download_bps = package.download_speed * 1_000_000
+            upload_bps = package.upload_speed * 1_000_000
+            radius_service.set_reply_attributes(
+                username=subscription.username,
+                download_bps=download_bps,
+                upload_bps=upload_bps,
+            )
+        except Exception as e:
+            logger.error(f"RADIUS ensure/set_reply failed for subscription {subscription_id}: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to create or update RADIUS user for subscription"
+            ) from e
+
         # Get API credentials from database (stored in plain text)
         api_username = router.mikrotik_api_username or "admin"
         if router.mikrotik_api_password:
@@ -475,6 +505,12 @@ class SubscriptionService:
             elif subscription.package_type == SubscriptionPackageType.STATIC.value:
                 subscription_mikrotik_actions.disable_static_queue(connection, subscription.username)
 
+            # Soft-suspend in RADIUS (Auth-Type := Reject)
+            try:
+                radius_service.suspend_user(subscription.username)
+            except Exception as e:
+                logger.warning(f"RADIUS suspend failed for subscription {subscription_id}: {e}")
+
             # Update subscription
             subscription.status = SubscriptionStatus.SUSPENDED.value
             subscription.updated_at = datetime.now(timezone.utc)
@@ -563,6 +599,12 @@ class SubscriptionService:
                 password=api_password_plain,
                 port=router.api_port
             )
+
+            # Unsuspend in RADIUS first so user can authenticate
+            try:
+                radius_service.unsuspend_user(subscription.username)
+            except Exception as e:
+                logger.warning(f"RADIUS unsuspend failed for subscription {subscription_id}: {e}")
 
             # Enable based on package type
             if subscription.package_type == SubscriptionPackageType.PPPOE.value:
@@ -668,6 +710,12 @@ class SubscriptionService:
             elif subscription.package_type == SubscriptionPackageType.STATIC.value:
                 subscription_mikrotik_actions.remove_static_queue(connection, subscription.username)
 
+            # Remove RADIUS user
+            try:
+                radius_service.delete_user(subscription.username)
+            except Exception as e:
+                logger.warning(f"RADIUS delete failed for subscription {subscription_id}: {e}")
+
             # Update subscription
             subscription.status = SubscriptionStatus.TERMINATED.value
             subscription.updated_at = datetime.now(timezone.utc)
@@ -753,9 +801,13 @@ class SubscriptionService:
                         elif subscription.package_type == SubscriptionPackageType.STATIC.value:
                             subscription_mikrotik_actions.disable_static_queue(connection, subscription.username)
 
+                        # Soft-suspend in RADIUS so user cannot authenticate
+                        try:
+                            radius_service.suspend_user(subscription.username)
+                        except Exception as re:
+                            logger.warning(f"RADIUS suspend failed for expired subscription {subscription.id}: {re}")
                     except Exception as e:
                         logger.error(f"Failed to disable subscription {subscription.id} on router: {str(e)}")
-                        # Continue to mark as expired even if router operation fails
                     finally:
                         if connection:
                             try:

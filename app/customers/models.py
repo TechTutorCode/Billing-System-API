@@ -38,7 +38,8 @@ class Customer(Base):
     phone = Column(String, nullable=True, index=True)
     id_number = Column(String, nullable=True)
     address = Column(String, nullable=True)
-    password_hash = Column(Text, nullable=False)
+    # No longer used: customer auth is via FreeRADIUS only (radcheck keyed by account_number).
+    password_hash = Column(Text, nullable=True)
     status = Column(
         SQLEnum(CustomerStatus, name="customer_status"),
         default=CustomerStatus.ACTIVE.value,

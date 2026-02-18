@@ -14,10 +14,16 @@ class Settings:
 
     def __init__(self):
         """Initialize settings from environment variables."""
-        # Database settings
+        # Database settings (billing application only)
         self.DATABASE_URL: str = os.getenv(
             "DATABASE_URL",
             "postgresql://user:password@localhost:5432/billing_system"
+        )
+# postgresql://radius_user:strongpassword@37.60.242.201:5432/billing_system
+        # RADIUS database (separate PostgreSQL; FreeRADIUS tables only)
+        self.RADIUS_DATABASE_URL: str = os.getenv(
+            "RADIUS_DATABASE_URL",
+            "postgresql://radius_user:strongpassword@37.60.242.201:5432/radius"
         )
 
         # Brevo (Sendinblue) API settings
@@ -68,6 +74,9 @@ class Settings:
         self.SSH_PORT: int = int(ssh_port) if ssh_port else 22
         ssh_strict_check = os.getenv("SSH_STRICT_HOST_KEY_CHECKING", "no")
         self.SSH_STRICT_HOST_KEY_CHECKING: str = ssh_strict_check if ssh_strict_check else "no"
+
+        # FreeRADIUS: default group for radusergroup (optional)
+        self.RADIUS_DEFAULT_GROUP: str = os.getenv("RADIUS_DEFAULT_GROUP", "users")
 
 
 @lru_cache()

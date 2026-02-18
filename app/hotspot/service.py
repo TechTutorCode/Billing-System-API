@@ -1,4 +1,8 @@
-"""Hotspot business logic services."""
+"""Hotspot business logic services.
+
+Hotspot users (e.g. MAC-based vouchers) can be managed in FreeRADIUS for auth.
+On create we add the user to radcheck/radreply; on expire we suspend in RADIUS.
+"""
 
 import logging
 from datetime import datetime, timedelta, timezone
@@ -8,12 +12,15 @@ from uuid import UUID
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.hotspot.models import HotspotPackage, HotspotVoucher
 from app.hotspot.mikrotik_service import hotspot_mikrotik_service
+from app.radius.service import radius_service
 from app.routers.models import Router
 from app.routers.mikrotik_service import mikrotik_service
 
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
 
 class HotspotService:
@@ -352,6 +359,23 @@ class HotspotService:
                 profile_name=package.mikrotik_profile_name
             )
 
+            # Create RADIUS user in RADIUS DB for MAC (username=MAC, password=MAC for hotspot auth)
+            try:
+                radius_service.create_user(
+                    username=mac_address,
+                    password=mac_address,
+                    groupname=settings.RADIUS_DEFAULT_GROUP or None,
+                )
+                download_bps = package.download_speed * 1000  # package speeds in Kbps
+                upload_bps = package.upload_speed * 1000
+                radius_service.set_reply_attributes(
+                    username=mac_address,
+                    download_bps=download_bps,
+                    upload_bps=upload_bps,
+                )
+            except Exception as e:
+                logger.warning(f"RADIUS create failed for MAC voucher {mac_address}: {e}")
+
             # Create voucher in database
             voucher = HotspotVoucher(
                 mac_address=mac_address,
@@ -475,6 +499,12 @@ class HotspotService:
                             connection_dict=connection,
                             mac_address=voucher.mac_address
                         )
+
+                        # Soft-suspend in RADIUS so MAC cannot authenticate
+                        try:
+                            radius_service.suspend_user(voucher.mac_address)
+                        except Exception as re:
+                            logger.warning(f"RADIUS suspend failed for expired voucher {voucher.mac_address}: {re}")
                     except Exception as e:
                         logger.error(f"Failed to disable MAC user {voucher.mac_address} on router: {str(e)}")
                         # Continue to mark as expired even if router operation fails

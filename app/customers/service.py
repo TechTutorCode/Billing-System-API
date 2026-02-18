@@ -1,4 +1,8 @@
-"""Customer business logic services."""
+"""Customer business logic services.
+
+Customer authentication is via FreeRADIUS only. Passwords are stored in radcheck
+(keyed by account_number); no local password verification.
+"""
 
 import logging
 from datetime import datetime, timezone
@@ -9,10 +13,12 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_
 
-from app.auth.utils import hash_password, verify_password
+from app.config import get_settings
 from app.customers.models import Customer, CustomerStatus
+from app.radius.service import radius_service
 
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
 
 class CustomerService:
@@ -89,18 +95,32 @@ class CustomerService:
         # Generate unique account number
         account_number = CustomerService.generate_account_number(db)
 
-        # Generate password hash (default password is the account number)
-        password_hash = hash_password(account_number)
-
-        # Create customer
+        # Create customer (no local password; auth via FreeRADIUS only)
         customer = Customer(
             isp_id=isp_id,
             account_number=account_number,
-            password_hash=password_hash,
+            password_hash=None,
             **customer_data,
             status=CustomerStatus.ACTIVE.value
         )
         db.add(customer)
+        db.flush()
+
+        # Create RADIUS user in RADIUS DB: username=account_number, Cleartext-Password := initial (account_number)
+        try:
+            radius_service.create_user(
+                username=account_number,
+                password=account_number,
+                groupname=settings.RADIUS_DEFAULT_GROUP or None,
+            )
+        except Exception as e:
+            db.rollback()
+            logger.error(f"RADIUS create failed for customer {account_number}: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to create RADIUS user for customer"
+            ) from e
+
         db.commit()
         db.refresh(customer)
 
@@ -218,7 +238,7 @@ class CustomerService:
         """
         customer = CustomerService.get_customer_by_id(db, customer_id, isp_id)
 
-        # Validate status transition
+        # Validate status transition and sync RADIUS suspend/unsuspend
         if "status" in customer_data and customer_data["status"]:
             new_status = customer_data["status"].lower()
             current_status = customer.status
@@ -235,6 +255,15 @@ class CustomerService:
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Invalid status: {new_status}"
                 )
+
+            # Sync RADIUS: suspend = Auth-Type Reject, active = remove Reject
+            try:
+                if new_status == CustomerStatus.SUSPENDED.value:
+                    radius_service.suspend_user(customer.account_number)
+                elif new_status == CustomerStatus.ACTIVE.value:
+                    radius_service.unsuspend_user(customer.account_number)
+            except Exception as e:
+                logger.warning(f"RADIUS status sync failed for {customer.account_number}: {e}")
 
             customer_data["status"] = new_status
 
@@ -308,39 +337,40 @@ class CustomerService:
         new_password: str
     ) -> Customer:
         """
-        Change customer password.
+        Change customer password. Updates radcheck only (no local storage).
+        Current password verification is not performed server-side; client should
+        verify via RADIUS auth before calling this.
 
         Args:
             db: Database session
             customer_id: Customer ID
             isp_id: ISP ID (for ownership verification)
-            current_password: Current password
+            current_password: Current password (accepted for API compatibility; verify via RADIUS elsewhere)
             new_password: New password
 
         Returns:
-            Updated Customer instance
+            Customer instance
 
         Raises:
-            HTTPException: If customer not found or password is incorrect
+            HTTPException: If customer not found or validation fails
         """
         customer = CustomerService.get_customer_by_id(db, customer_id, isp_id)
 
-        # Verify current password
-        if not verify_password(current_password, customer.password_hash):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Current password is incorrect"
-            )
-
-        # Validate new password
         if not new_password or len(new_password) < 6:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="New password must be at least 6 characters long"
             )
 
-        # Update password
-        customer.password_hash = hash_password(new_password)
+        try:
+            radius_service.update_password(customer.account_number, new_password)
+        except Exception as e:
+            logger.error(f"RADIUS password update failed for {customer.account_number}: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to update password in RADIUS"
+            ) from e
+
         customer.updated_at = datetime.now(timezone.utc)
         db.commit()
         db.refresh(customer)
@@ -376,6 +406,12 @@ class CustomerService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Cannot activate customer with status '{customer.status}'. Only terminated customers can be activated."
             )
+
+        # Ensure RADIUS user can authenticate again (remove Auth-Type Reject if any)
+        try:
+            radius_service.unsuspend_user(customer.account_number)
+        except Exception as e:
+            logger.warning(f"RADIUS unsuspend failed for {customer.account_number}: {e}")
 
         # Activate: set status to active
         customer.status = CustomerStatus.ACTIVE.value
