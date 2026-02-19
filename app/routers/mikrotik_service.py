@@ -76,7 +76,11 @@ class MikroTikService:
             HTTPException: If connection fails
         """
         try:
-            logger.info(f"Connecting to MikroTik API at {host}:{port} with user {username}")
+            # TODO: remove password from logs before production
+            logger.info(
+                "Connecting to MikroTik API at %s:%s username=%s password=%s",
+                host, port, username, password,
+            )
             # Use RouterOsApiPool for connection
             connection_pool = routeros_api.RouterOsApiPool(
                 host=host,
