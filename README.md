@@ -86,9 +86,13 @@ A FastAPI-based backend for ISP (Internet Service Provider) registration, billin
    OPENVPN_SERVER_PORT=1194
    OPENVPN_STATUS_LOG=/var/log/openvpn-status.log
 
-   # FreeRADIUS (separate PostgreSQL database for radcheck, radreply, radusergroup)
+   # FreeRADIUS (separate PostgreSQL database for radcheck, radreply, radusergroup, nas)
    RADIUS_DATABASE_URL=postgresql://radius_user:password@localhost:5432/radius
    RADIUS_DEFAULT_GROUP=users
+   # FreeRADIUS server IP (for auto-configuring MikroTik as RADIUS client when router comes online)
+   RADIUS_SERVER_IP=10.0.0.1
+   RADIUS_SERVER_AUTH_PORT=1812
+   RADIUS_SERVER_ACCT_PORT=1813
 
    # App
    DEBUG=false

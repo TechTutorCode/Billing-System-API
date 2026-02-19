@@ -46,6 +46,10 @@ class Router(Base):
         index=True
     )
     last_seen = Column(DateTime(timezone=True), nullable=True)
+    # RADIUS: secret for this router as NAS (generated at create, used in FreeRADIUS nas table)
+    radius_secret = Column(String(255), nullable=True, index=False)
+    # True after NAS row is inserted and MikroTik RADIUS client + PPP AAA are configured
+    radius_configured = Column(Boolean, default=False, nullable=False)
     created_at = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_
 
 from app.radius.database import RadiusSessionLocal
-from app.radius.models import Radcheck, Radreply, Radusergroup
+from app.radius.models import Nas, Radcheck, Radreply, Radusergroup
 
 logger = logging.getLogger(__name__)
 
@@ -347,6 +347,49 @@ class RadiusService:
             "RADIUS user group assigned",
             extra={"username": username, "groupname": groupname},
         )
+
+    @staticmethod
+    def add_nas(nasname: str, shortname: str, secret: str) -> None:
+        """
+        Register a NAS (router) in the RADIUS database so FreeRADIUS trusts it.
+        Uses its own RADIUS session. Never logs the secret.
+
+        Args:
+            nasname: NAS IP address (e.g. router VPN IP).
+            shortname: Short name / identifier (e.g. router name).
+            secret: Shared secret (must match MikroTik RADIUS client config).
+        """
+        if not nasname or not shortname or not secret:
+            raise ValueError("nasname, shortname, and secret are required")
+        db = RadiusSessionLocal()
+        try:
+            existing = (
+                db.query(Nas)
+                .filter(Nas.nasname == nasname.strip(), Nas.shortname == shortname.strip())
+                .first()
+            )
+            if existing:
+                existing.secret = secret
+                existing.type = "other"
+            else:
+                db.add(
+                    Nas(
+                        nasname=nasname.strip(),
+                        shortname=shortname.strip(),
+                        type="other",
+                        secret=secret,
+                    )
+                )
+            db.commit()
+            logger.info(
+                "RADIUS NAS registered",
+                extra={"nasname": nasname, "shortname": shortname},
+            )
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
 
 
 radius_service = RadiusService()

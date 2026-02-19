@@ -452,6 +452,62 @@ class MikroTikService:
             )
 
 
+    @staticmethod
+    def configure_radius_for_ppp(
+        connection_dict,
+        radius_server_ip: str,
+        radius_secret: str,
+        auth_port: int = 1812,
+        acct_port: int = 1813,
+    ) -> None:
+        """
+        Add RADIUS client for PPP and enable use-radius + accounting on MikroTik.
+        So the router authenticates PPP/PPPoE users via FreeRADIUS.
+
+        Args:
+            connection_dict: From connect() with 'pool' and 'api' keys.
+            radius_server_ip: FreeRADIUS server IP.
+            radius_secret: Shared secret (never logged).
+            auth_port: RADIUS auth port (default 1812).
+            acct_port: RADIUS accounting port (default 1813).
+
+        Raises:
+            HTTPException: If API calls fail.
+        """
+        try:
+            api = connection_dict["api"]
+            # Add RADIUS client for PPP (RouterOS uses hyphenated property names)
+            resource = api.get_resource("/radius")
+            resource.add(
+                **{
+                    "address": radius_server_ip,
+                    "service": "ppp",
+                    "secret": radius_secret,
+                    "authentication-port": str(auth_port),
+                    "accounting-port": str(acct_port),
+                    "disabled": "false",
+                }
+            )
+            logger.info("RADIUS client added for PPP", extra={"address": radius_server_ip})
+            # Enable RADIUS and accounting for PPP (single default record)
+            aaa = api.get_resource("/ppp/aaa")
+            aaa_items = aaa.get()
+            if aaa_items:
+                aaa.set(
+                    id=aaa_items[0]["id"],
+                    **{"use-radius": "yes", "accounting": "yes"},
+                )
+                logger.info("PPP AAA set use-radius=yes accounting=yes")
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to configure RADIUS on MikroTik: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to configure RADIUS on MikroTik: {str(e)}"
+            )
+
+
 # Global instance
 mikrotik_service = MikroTikService()
 

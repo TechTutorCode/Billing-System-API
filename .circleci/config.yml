@@ -41,6 +41,7 @@ jobs:
 
               # Write environment variables
               echo 'DATABASE_URL=\"$DATABASE_URL\"' > .env
+              echo 'RADIUS_SERVER_IP=\"$RADIUS_SERVER_IP\"' > .env
               echo 'RADIUS_DATABASE_URL=\"$RADIUS_DATABASE_URL\"' > .env
               echo 'BREVO_API_KEY=\"$BREVO_API_KEY\"' >> .env
               echo 'BREVO_SENDER_EMAIL=\"$BREVO_SENDER_EMAIL\"' >> .env

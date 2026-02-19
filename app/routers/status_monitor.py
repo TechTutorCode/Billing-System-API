@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.database import SessionLocal
+from app.radius.service import radius_service
 from app.routers.models import Router, RouterStatus
 from app.routers.services import router_service
 from app.routers.mikrotik_service import mikrotik_service
@@ -216,6 +217,52 @@ def parse_openvpn_status_log() -> Dict[str, Tuple[str, Optional[str]]]:
     return username_to_ip if username_to_ip else {}
 
 
+def _ensure_router_radius_setup(db: Session, router: Router) -> None:
+    """
+    When router has vpn_ip and API is reachable: insert NAS in RADIUS DB and
+    auto-configure MikroTik RADIUS client + PPP AAA. Then mark router.radius_configured.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    if not router.vpn_ip or not router.radius_secret or router.radius_configured:
+        return
+    connection = None
+    try:
+        radius_service.add_nas(router.vpn_ip, router.name, router.radius_secret)
+        api_user = router.mikrotik_api_username or "admin"
+        api_pass = router.mikrotik_api_password
+        if not api_pass:
+            logger.warning("Router %s: no MikroTik API password, skipping RADIUS config", router.id)
+            return
+        connection = mikrotik_service.connect(
+            host=router.vpn_ip,
+            username=api_user,
+            password=api_pass,
+            port=router.api_port,
+        )
+        mikrotik_service.configure_radius_for_ppp(
+            connection,
+            radius_server_ip=settings.RADIUS_SERVER_IP,
+            radius_secret=router.radius_secret,
+            auth_port=settings.RADIUS_SERVER_AUTH_PORT,
+            acct_port=settings.RADIUS_SERVER_ACCT_PORT,
+        )
+        router.radius_configured = True
+        db.commit()
+        db.refresh(router)
+        logger.info("Router %s: RADIUS NAS and MikroTik RADIUS client configured", router.id)
+    except Exception as e:
+        logger.warning("Router %s: RADIUS setup failed: %s", router.id, e)
+    finally:
+        if connection:
+            try:
+                pool = connection.get("pool")
+                if pool:
+                    pool.disconnect()
+            except Exception:
+                pass
+
+
 def update_router_statuses():
     """
     Background task to update router statuses based on OpenVPN log and API tests.
@@ -276,6 +323,14 @@ def update_router_statuses():
                                 router=router,
                                 update_last_seen=True
                             )
+
+                        # Phase 2: When router has vpn_ip and API is reachable, register NAS and auto-configure MikroTik RADIUS
+                        if (
+                            router.radius_secret
+                            and not router.radius_configured
+                            and settings.RADIUS_SERVER_IP
+                        ):
+                            _ensure_router_radius_setup(db, router)
                     else:
                         mikrotik_api_accessible = False
                         final_status = RouterStatus.VPN_CONNECTED.value

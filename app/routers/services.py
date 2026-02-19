@@ -1,5 +1,6 @@
 """Router business logic services."""
 
+import secrets
 import uuid
 from typing import Optional
 from uuid import UUID
@@ -54,7 +55,9 @@ class RouterService:
         vpn_password = generate_router_password()
         vpn_password_encrypted = encrypt_vpn_password(vpn_password)
 
-        # Store MikroTik API password in plain text (needed for API connections)
+        # Generate RADIUS secret for this router (used in FreeRADIUS nas table and MikroTik RADIUS client)
+        radius_secret = secrets.token_hex(16)
+
         # Create router record first (to get the ID)
         router = Router(
             isp_id=isp.id,
@@ -65,7 +68,9 @@ class RouterService:
             mikrotik_api_username=mikrotik_api_username or "admin",
             mikrotik_api_password=mikrotik_api_password,
             status=RouterStatus.PENDING.value,
-            is_active=True
+            is_active=True,
+            radius_secret=radius_secret,
+            radius_configured=False,
         )
         db.add(router)
         db.flush()  # Flush to get the ID
