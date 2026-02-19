@@ -1,5 +1,32 @@
-"""Background task for monitoring router status from OpenVPN logs."""
+"""
+Background task for monitoring router status from OpenVPN logs.
 
+RADIUS automatic configuration (Phase 2)
+------------------------------------------
+When an ISP adds a router, we only create the router in the billing DB and generate
+a radius_secret; we do NOT yet have the router's IP. Once the router connects over
+OpenVPN, this monitor (running every ~10 seconds) does:
+
+1. Parse OpenVPN status log (via SSH) → get vpn_username → vpn_ip for each connected client.
+2. For each known router: if it appears in the log, set router.vpn_ip and status VPN_CONNECTED.
+3. Test if MikroTik API is reachable at vpn_ip:api_port (TCP connect).
+4. If reachable → set status ONLINE.
+5. RADIUS auto-config (only when all of the following are true):
+   - Router has vpn_ip (from step 2).
+   - MikroTik API test passed (router is ONLINE).
+   - router.radius_secret is set (set at router creation).
+   - router.radius_configured is False (we haven't done this yet).
+   - RADIUS_SERVER_IP env is set (FreeRADIUS server address to push to MikroTik).
+
+   Then we:
+   a) Insert/update row in RADIUS DB nas table (nasname=vpn_ip, shortname=router.name, secret=radius_secret).
+   b) Connect to MikroTik API and run: /radius add address=RADIUS_SERVER_IP service=ppp secret=... ; /ppp aaa set use-radius=yes accounting=yes.
+   c) Set router.radius_configured = True so we never do this again for this router.
+
+Result: MikroTik → FreeRADIUS → radius DB; no manual RADIUS config on the router.
+"""
+
+import logging
 import re
 import subprocess
 from datetime import datetime, timezone
@@ -16,6 +43,7 @@ from app.routers.services import router_service
 from app.routers.mikrotik_service import mikrotik_service
 from app.routers.status_history_models import RouterStatusHistory
 
+logger = logging.getLogger(__name__)
 settings = get_settings()
 OPENVPN_STATUS_LOG = settings.OPENVPN_STATUS_LOG
 
@@ -223,12 +251,21 @@ def _ensure_router_radius_setup(db: Session, router: Router, vpn_ip: str) -> Non
     auto-configure MikroTik RADIUS client + PPP AAA. Then mark router.radius_configured.
     vpn_ip is passed explicitly (from OpenVPN log) to avoid relying on router.vpn_ip sync.
     """
-    import logging
     import traceback
-    logger = logging.getLogger(__name__)
     # Treat None radius_configured as False (e.g. column added later without default)
     already_done = bool(router.radius_configured)
-    if not vpn_ip or not router.radius_secret or already_done:
+    logger.info(
+        "[RADIUS auto-config] Router %s (%s): check vpn_ip=%s radius_secret=%s radius_configured=%s",
+        router.id, router.name, vpn_ip, "set" if router.radius_secret else "NOT SET", already_done,
+    )
+    if not vpn_ip:
+        logger.info("[RADIUS auto-config] Router %s: skip (no vpn_ip)", router.id)
+        return
+    if not router.radius_secret:
+        logger.info("[RADIUS auto-config] Router %s: skip (no radius_secret; create router after column was added or backfill)", router.id)
+        return
+    if already_done:
+        logger.info("[RADIUS auto-config] Router %s: skip (already configured)", router.id)
         return
     connection = None
     try:
@@ -301,6 +338,10 @@ def update_router_statuses():
                 final_status = router.status
 
                 if vpn_ip:
+                    logger.debug(
+                        "[RADIUS auto-config] Router %s (%s): seen in VPN log at %s",
+                        router.id, router.name, vpn_ip,
+                    )
                     # Router is connected to VPN - always update last_seen to current time
                     if router.vpn_ip != vpn_ip:
                         # Update VPN IP and last_seen
@@ -340,12 +381,31 @@ def update_router_statuses():
                         # Phase 2: When router has vpn_ip and API is reachable, register NAS and auto-configure MikroTik RADIUS
                         radius_configured = getattr(router, "radius_configured", None)
                         radius_secret = getattr(router, "radius_secret", None)
-                        radius_server_ip = getattr(settings, "RADIUS_SERVER_IP", None) or ""
-                        if radius_secret and not radius_configured and radius_server_ip.strip():
+                        radius_server_ip = (getattr(settings, "RADIUS_SERVER_IP", None) or "").strip()
+                        logger.info(
+                            "[RADIUS auto-config] Router %s (%s): ONLINE at %s | radius_secret=%s radius_configured=%s RADIUS_SERVER_IP=%s",
+                            router.id, router.name, vpn_ip,
+                            "set" if radius_secret else "NOT SET",
+                            radius_configured,
+                            "set" if radius_server_ip else "NOT SET",
+                        )
+                        if radius_secret and not radius_configured and radius_server_ip:
+                            logger.info("[RADIUS auto-config] Router %s: running NAS + MikroTik RADIUS setup", router.id)
                             _ensure_router_radius_setup(db, router, vpn_ip)
+                        else:
+                            if not radius_server_ip:
+                                logger.info("[RADIUS auto-config] Router %s: skip (RADIUS_SERVER_IP not set in env)", router.id)
+                            elif not radius_secret:
+                                logger.info("[RADIUS auto-config] Router %s: skip (no radius_secret)", router.id)
+                            elif radius_configured:
+                                logger.info("[RADIUS auto-config] Router %s: skip (already configured)", router.id)
                     else:
                         mikrotik_api_accessible = False
                         final_status = RouterStatus.VPN_CONNECTED.value
+                        logger.info(
+                            "[RADIUS auto-config] Router %s (%s): VPN at %s but API not reachable (port %s) - RADIUS setup will not run until ONLINE",
+                            router.id, router.name, vpn_ip, router.api_port,
+                        )
                         # VPN connected but API not accessible
                         if router.status != RouterStatus.VPN_CONNECTED.value:
                             router_service.update_router_status(
@@ -361,6 +421,10 @@ def update_router_statuses():
                                 update_last_seen=True
                             )
                 else:
+                    logger.debug(
+                        "[RADIUS auto-config] Router %s (%s): not in VPN log (vpn_ip=None) - RADIUS setup requires router to connect first",
+                        router.id, router.name,
+                    )
                     final_status = RouterStatus.OFFLINE.value if router.status != RouterStatus.PENDING.value else RouterStatus.PENDING.value
                     # Router not in VPN log, mark as offline
                     if router.status != RouterStatus.PENDING.value:
