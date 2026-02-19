@@ -515,44 +515,10 @@ class MikroTikService:
                 }
             )
             logger.info("RADIUS client added for PPP", extra={"address": radius_server_ip})
-            # Enable RADIUS and accounting for PPP (single default record)
-            # RouterOS /ppp/aaa may return .id, id, or no id (single row); library may use different key names
+            # RouterOS v7: /ppp/aaa is singleton config — no .id, set directly. v6 also accepts set without id.
             aaa = api.get_resource("/ppp/aaa")
-            aaa_items = aaa.get()
-            if not aaa_items:
-                logger.warning("PPP AAA returned no rows, skipping use-radius/accounting set")
-            else:
-                first = aaa_items[0]
-                # RouterOS API can return .id, id, =.id depending on library/version
-                if isinstance(first, dict):
-                    aaa_id = (
-                        first.get(".id")
-                        or first.get("id")
-                        or first.get("=.id")
-                        or next((v for k, v in first.items() if k and "id" in k.lower() and v), None)
-                    )
-                    if not aaa_id:
-                        logger.info("PPP AAA first row keys: %s", list(first.keys()))
-                else:
-                    aaa_id = getattr(first, "id", None)
-                if aaa_id:
-                    aaa.set(
-                        id=str(aaa_id).strip(),
-                        **{"use-radius": "yes", "accounting": "yes"},
-                    )
-                    logger.info("PPP AAA set use-radius=yes accounting=yes")
-                else:
-                    # Try common RouterOS internal ids (first record is often *1)
-                    for candidate_id in ("*1", "*2", "*0", "0", "1"):
-                        try:
-                            aaa.set(id=candidate_id, **{"use-radius": "yes", "accounting": "yes"})
-                            logger.info("PPP AAA set use-radius=yes accounting=yes (id=%s)", candidate_id)
-                            break
-                        except Exception:
-                            continue
-                    else:
-                        keys_repr = list(first.keys()) if isinstance(first, dict) else type(first).__name__
-                        raise ValueError("PPP AAA record has no .id/id; first row keys: %s" % keys_repr)
+            aaa.set(**{"use-radius": "yes", "accounting": "yes"})
+            logger.info("PPP AAA set use-radius=yes accounting=yes")
         except HTTPException:
             raise
         except Exception as e:
