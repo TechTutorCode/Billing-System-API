@@ -81,19 +81,31 @@ class MikroTikService:
                 "Connecting to MikroTik API at %s:%s username=%s password=%s",
                 host, port, username, password,
             )
-            # Use RouterOsApiPool for connection
-            connection_pool = routeros_api.RouterOsApiPool(
-                host=host,
-                username=username,
-                password=password,
-                port=port,
-                plaintext_login=True
-            )
-            # Get the API connection from the pool
-            api = connection_pool.get_api()
-            logger.info(f"Successfully connected to MikroTik API at {host}:{port}")
-            # Return both the pool and api for proper cleanup
-            return {"pool": connection_pool, "api": api}
+            # Try encrypted login first (older RouterOS); fall back to plaintext (6.43+)
+            for plaintext in (False, True):
+                try:
+                    connection_pool = routeros_api.RouterOsApiPool(
+                        host=host,
+                        username=username,
+                        password=password,
+                        port=port,
+                        plaintext_login=plaintext,
+                    )
+                    api = connection_pool.get_api()
+                    logger.info(
+                        "Successfully connected to MikroTik API at %s:%s (plaintext_login=%s)",
+                        host, port, plaintext,
+                    )
+                    return {"pool": connection_pool, "api": api}
+                except Exception as conn_err:
+                    if getattr(conn_err, "__module__", "").startswith("routeros_api"):
+                        logger.warning(
+                            "MikroTik API connect with plaintext_login=%s failed: %s; %s",
+                            plaintext, type(conn_err).__name__, conn_err,
+                        )
+                        if plaintext is False:
+                            continue
+                    raise
         except Exception as e:
             error_msg = str(e)
             logger.error(f"Failed to connect to MikroTik API at {host}:{port}: {error_msg}")
