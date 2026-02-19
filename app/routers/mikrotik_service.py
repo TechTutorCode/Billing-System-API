@@ -108,24 +108,34 @@ class MikroTikService:
                     raise
         except Exception as e:
             error_msg = str(e)
+            exc_name = type(e).__name__
             logger.error(f"Failed to connect to MikroTik API at {host}:{port}: {error_msg}")
-            
-            # Check for authentication errors
+
+            # Connection closed during login = router rejected us (wrong credentials or no API access)
+            if exc_name == "RouterOsApiConnectionClosedError":
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail=(
+                        "MikroTik closed the connection during login. "
+                        "Check: (1) Username and password for this router are correct in the app. "
+                        "(2) On the router, the API user exists and has a group with API (or full) access. "
+                        "(3) IP → Services: API is enabled."
+                    ),
+                )
             if "invalid user name or password" in error_msg.lower() or "password" in error_msg.lower():
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="MikroTik API authentication failed. Please verify the username and password are correct, and that the API user has API access enabled on the router."
                 )
-            elif "connection" in error_msg.lower() or "refused" in error_msg.lower() or "timeout" in error_msg.lower():
+            if "connection" in error_msg.lower() or "refused" in error_msg.lower() or "timeout" in error_msg.lower():
                 raise HTTPException(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                     detail=f"Cannot connect to MikroTik router at {host}:{port}. Please verify the router is online and the API port is accessible."
                 )
-            else:
-                raise HTTPException(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail=f"Failed to connect to MikroTik router: {error_msg}"
-                )
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"Failed to connect to MikroTik router: {error_msg}"
+            )
 
     @staticmethod
     def check_profile_exists(
@@ -506,11 +516,16 @@ class MikroTikService:
             )
             logger.info("RADIUS client added for PPP", extra={"address": radius_server_ip})
             # Enable RADIUS and accounting for PPP (single default record)
+            # RouterOS API may return ".id" or "id" depending on version/library
             aaa = api.get_resource("/ppp/aaa")
             aaa_items = aaa.get()
             if aaa_items:
+                first = aaa_items[0]
+                aaa_id = first.get(".id") or first.get("id")
+                if not aaa_id:
+                    raise ValueError("PPP AAA record has no .id or id")
                 aaa.set(
-                    id=aaa_items[0]["id"],
+                    id=aaa_id,
                     **{"use-radius": "yes", "accounting": "yes"},
                 )
                 logger.info("PPP AAA set use-radius=yes accounting=yes")
