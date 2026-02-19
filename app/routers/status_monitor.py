@@ -328,19 +328,27 @@ def update_router_statuses():
 
         # Parse OpenVPN status log
         router_info = parse_openvpn_status_log()  # Returns Dict[str, Tuple[str, Optional[str]]]
-        
+        logger.info(
+            "[status check] Monitor run: %s active router(s), VPN log has %s client(s). Checking each router.",
+            len(routers), len(router_info),
+        )
         for router in routers:
             try:
+                # Log when check starts and what we got from VPN log
                 router_data = router_info.get(router.vpn_username)
                 vpn_ip = router_data[0] if router_data else None
                 connected_since_str = router_data[1] if router_data and len(router_data) > 1 else None
+                logger.info(
+                    "[status check] Router %s (%s) vpn_username=%s → vpn_ip=%s (in_log=%s)",
+                    router.id, router.name, router.vpn_username, vpn_ip or "None", "yes" if vpn_ip else "no",
+                )
                 mikrotik_api_accessible = False
                 final_status = router.status
 
                 if vpn_ip:
-                    logger.debug(
-                        "[RADIUS auto-config] Router %s (%s): seen in VPN log at %s",
-                        router.id, router.name, vpn_ip,
+                    logger.info(
+                        "[status check] Router %s (%s): in VPN log at %s, testing MikroTik API at %s:%s",
+                        router.id, router.name, vpn_ip, vpn_ip, router.api_port,
                     )
                     # Router is connected to VPN - always update last_seen to current time
                     if router.vpn_ip != vpn_ip:
@@ -360,7 +368,12 @@ def update_router_statuses():
                         )
 
                     # Test MikroTik API connection (use the newly parsed vpn_ip)
-                    if mikrotik_service.test_api_connection(vpn_ip, router.api_port):
+                    api_ok = mikrotik_service.test_api_connection(vpn_ip, router.api_port)
+                    logger.info(
+                        "[status check] Router %s (%s): MikroTik API test %s → %s",
+                        router.id, router.name, vpn_ip, "OK (ONLINE)" if api_ok else "FAILED",
+                    )
+                    if api_ok:
                         mikrotik_api_accessible = True
                         final_status = RouterStatus.ONLINE.value
                         # API is accessible, router is online - update last_seen
@@ -383,7 +396,7 @@ def update_router_statuses():
                         radius_secret = getattr(router, "radius_secret", None)
                         radius_server_ip = (getattr(settings, "RADIUS_SERVER_IP", None) or "").strip()
                         logger.info(
-                            "[RADIUS auto-config] Router %s (%s): ONLINE at %s | radius_secret=%s radius_configured=%s RADIUS_SERVER_IP=%s",
+                            "[RADIUS check] Router %s (%s): check starting (ONLINE at %s). Found: radius_secret=%s radius_configured=%s RADIUS_SERVER_IP=%s",
                             router.id, router.name, vpn_ip,
                             "set" if radius_secret else "NOT SET",
                             radius_configured,
@@ -421,8 +434,8 @@ def update_router_statuses():
                                 update_last_seen=True
                             )
                 else:
-                    logger.debug(
-                        "[RADIUS auto-config] Router %s (%s): not in VPN log (vpn_ip=None) - RADIUS setup requires router to connect first",
+                    logger.info(
+                        "[status check] Router %s (%s): not in VPN log (vpn_ip=None). RADIUS check will not run until router connects.",
                         router.id, router.name,
                     )
                     final_status = RouterStatus.OFFLINE.value if router.status != RouterStatus.PENDING.value else RouterStatus.PENDING.value
