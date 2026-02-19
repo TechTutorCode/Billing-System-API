@@ -322,8 +322,8 @@ def update_router_statuses():
     try:
         # Get all active routers
         routers = db.query(Router).filter(Router.is_active == True).all()
-
         if not routers:
+            logger.info("[status check] Monitor run: no active routers, skipping.")
             return
 
         # Parse OpenVPN status log

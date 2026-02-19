@@ -106,14 +106,23 @@ app.include_router(hotspot_router)
 async def startup_event():
     import asyncio
     import logging
+    import sys
+
+    # Ensure app loggers show up in Docker/console (uvicorn only configures its own loggers)
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+        stream=sys.stdout,
+        force=True,
+    )
 
     from app.database import SessionLocal
     from app.packages.service import package_service
 
     logger = logging.getLogger(__name__)
-    print("=" * 80)
-    print("[STARTUP] Starting application startup tasks...")
-    print("=" * 80)
+    print("=" * 80, flush=True)
+    print("[STARTUP] Starting application startup tasks...", flush=True)
+    print("=" * 80, flush=True)
     logger.info("Starting application startup tasks...")
 
     # Seed package types
@@ -143,7 +152,8 @@ async def startup_event():
                 await asyncio.sleep(60)
 
     asyncio.create_task(monitor_loop())
-    # logger.info("Router status monitor background task started successfully")
+    logger.info("Router status monitor background task started (runs every 10s)")
+    print("[STARTUP] Router status monitor started.", flush=True)
 
     # Start subscription expiry monitor
     from app.subscriptions.expiry_monitor import start_expiry_monitor
