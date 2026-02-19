@@ -79,7 +79,7 @@ class Settings:
         self.RADIUS_DEFAULT_GROUP: str = os.getenv("RADIUS_DEFAULT_GROUP", "users")
 
         # FreeRADIUS server address (used when auto-configuring MikroTik as RADIUS client)
-        self.RADIUS_SERVER_IP: str = os.getenv("RADIUS_SERVER_IP", "")
+        self.RADIUS_SERVER_IP: str = os.getenv("RADIUS_SERVER_IP", "37.60.242.201")
         radius_auth_port = os.getenv("RADIUS_SERVER_AUTH_PORT", "1812")
         self.RADIUS_SERVER_AUTH_PORT: int = int(radius_auth_port) if radius_auth_port else 1812
         radius_acct_port = os.getenv("RADIUS_SERVER_ACCT_PORT", "1813")
