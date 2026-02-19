@@ -217,25 +217,32 @@ def parse_openvpn_status_log() -> Dict[str, Tuple[str, Optional[str]]]:
     return username_to_ip if username_to_ip else {}
 
 
-def _ensure_router_radius_setup(db: Session, router: Router) -> None:
+def _ensure_router_radius_setup(db: Session, router: Router, vpn_ip: str) -> None:
     """
     When router has vpn_ip and API is reachable: insert NAS in RADIUS DB and
     auto-configure MikroTik RADIUS client + PPP AAA. Then mark router.radius_configured.
+    vpn_ip is passed explicitly (from OpenVPN log) to avoid relying on router.vpn_ip sync.
     """
     import logging
+    import traceback
     logger = logging.getLogger(__name__)
-    if not router.vpn_ip or not router.radius_secret or router.radius_configured:
+    # Treat None radius_configured as False (e.g. column added later without default)
+    already_done = bool(router.radius_configured)
+    if not vpn_ip or not router.radius_secret or already_done:
         return
     connection = None
     try:
-        radius_service.add_nas(router.vpn_ip, router.name, router.radius_secret)
+        radius_service.add_nas(vpn_ip, router.name, router.radius_secret)
         api_user = router.mikrotik_api_username or "admin"
         api_pass = router.mikrotik_api_password
         if not api_pass:
-            logger.warning("Router %s: no MikroTik API password, skipping RADIUS config", router.id)
+            logger.warning(
+                "Router %s (%s): no MikroTik API password, skipping RADIUS config",
+                router.id, router.name,
+            )
             return
         connection = mikrotik_service.connect(
-            host=router.vpn_ip,
+            host=vpn_ip,
             username=api_user,
             password=api_pass,
             port=router.api_port,
@@ -250,9 +257,15 @@ def _ensure_router_radius_setup(db: Session, router: Router) -> None:
         router.radius_configured = True
         db.commit()
         db.refresh(router)
-        logger.info("Router %s: RADIUS NAS and MikroTik RADIUS client configured", router.id)
+        logger.info(
+            "Router %s (%s): RADIUS NAS and MikroTik RADIUS client configured at %s",
+            router.id, router.name, vpn_ip,
+        )
     except Exception as e:
-        logger.warning("Router %s: RADIUS setup failed: %s", router.id, e)
+        logger.warning(
+            "Router %s (%s): RADIUS setup failed: %s\n%s",
+            router.id, router.name, e, traceback.format_exc(),
+        )
     finally:
         if connection:
             try:
@@ -325,12 +338,11 @@ def update_router_statuses():
                             )
 
                         # Phase 2: When router has vpn_ip and API is reachable, register NAS and auto-configure MikroTik RADIUS
-                        if (
-                            router.radius_secret
-                            and not router.radius_configured
-                            and settings.RADIUS_SERVER_IP
-                        ):
-                            _ensure_router_radius_setup(db, router)
+                        radius_configured = getattr(router, "radius_configured", None)
+                        radius_secret = getattr(router, "radius_secret", None)
+                        radius_server_ip = getattr(settings, "RADIUS_SERVER_IP", None) or ""
+                        if radius_secret and not radius_configured and radius_server_ip.strip():
+                            _ensure_router_radius_setup(db, router, vpn_ip)
                     else:
                         mikrotik_api_accessible = False
                         final_status = RouterStatus.VPN_CONNECTED.value
