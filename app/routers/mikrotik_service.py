@@ -487,8 +487,10 @@ class MikroTikService:
         acct_port: int = 1813,
     ) -> None:
         """
-        Add RADIUS client for PPP and enable use-radius + accounting on MikroTik.
-        So the router authenticates PPP/PPPoE users via FreeRADIUS.
+        Add RADIUS clients for PPP and Hotspot and enable PPP AAA use-radius.
+        - Adds /radius client with service=ppp (and service=hotspot if missing).
+        - Sets /ppp/aaa use-radius=yes, accounting=yes.
+        Idempotent: skips add if a client for this server+service already exists.
 
         Args:
             connection_dict: From connect() with 'pool' and 'api' keys.
@@ -502,20 +504,36 @@ class MikroTikService:
         """
         try:
             api = connection_dict["api"]
-            # Add RADIUS client for PPP (RouterOS uses hyphenated property names)
             resource = api.get_resource("/radius")
-            resource.add(
-                **{
-                    "address": radius_server_ip,
-                    "service": "ppp",
-                    "secret": radius_secret,
-                    "authentication-port": str(auth_port),
-                    "accounting-port": str(acct_port),
-                    "disabled": "false",
-                }
-            )
-            logger.info("RADIUS client added for PPP", extra={"address": radius_server_ip})
-            # RouterOS v7: /ppp/aaa is singleton config — no .id, set directly. v6 also accepts set without id.
+            server_ip_str = str(radius_server_ip).strip()
+            radius_list = resource.get() or []
+            def has_client(service: str) -> bool:
+                for item in radius_list:
+                    if not isinstance(item, dict):
+                        continue
+                    addr = item.get("address")
+                    svc = item.get("service")
+                    if addr and str(addr).strip() == server_ip_str and svc and service.lower() in str(svc).lower():
+                        return True
+                return False
+            base_attrs = {
+                "address": radius_server_ip,
+                "secret": radius_secret,
+                "authentication-port": str(auth_port),
+                "accounting-port": str(acct_port),
+                "disabled": "false",
+            }
+            if not has_client("ppp"):
+                resource.add(**{**base_attrs, "service": "ppp"})
+                logger.info("RADIUS client added for PPP", extra={"address": radius_server_ip})
+            else:
+                logger.info("RADIUS client for PPP already present", extra={"address": radius_server_ip})
+            if not has_client("hotspot"):
+                resource.add(**{**base_attrs, "service": "hotspot"})
+                logger.info("RADIUS client added for Hotspot", extra={"address": radius_server_ip})
+            else:
+                logger.info("RADIUS client for Hotspot already present", extra={"address": radius_server_ip})
+            # RouterOS v7: /ppp/aaa is singleton — set use-radius and accounting for PPP
             aaa = api.get_resource("/ppp/aaa")
             aaa.set(**{"use-radius": "yes", "accounting": "yes"})
             logger.info("PPP AAA set use-radius=yes accounting=yes")
@@ -527,6 +545,66 @@ class MikroTikService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to configure RADIUS on MikroTik: {str(e)}"
             )
+
+    @staticmethod
+    def verify_radius_for_ppp(
+        connection_dict,
+        radius_server_ip: str,
+    ) -> bool:
+        """
+        Check if RADIUS for PPP and Hotspot is still configured on the router.
+        Returns True only if:
+        - /radius has an entry for this server with service=ppp
+        - /radius has an entry for this server with service=hotspot
+        - /ppp/aaa has use-radius=yes
+        Returns False if any is missing or API fails. Used to set radius_configured=False when removed.
+        """
+        try:
+            api = connection_dict["api"]
+            radius_resource = api.get_resource("/radius")
+            radius_list = radius_resource.get() or []
+            server_ip_str = str(radius_server_ip).strip()
+            has_ppp = False
+            has_hotspot = False
+            for item in radius_list:
+                if not isinstance(item, dict):
+                    continue
+                addr = item.get("address")
+                svc = item.get("service")
+                if not addr or str(addr).strip() != server_ip_str or not svc:
+                    continue
+                svc_lower = str(svc).lower()
+                if "ppp" in svc_lower:
+                    has_ppp = True
+                if "hotspot" in svc_lower:
+                    has_hotspot = True
+            if not has_ppp:
+                logger.info("RADIUS verify: no PPP RADIUS client for %s on router", server_ip_str)
+                return False
+            if not has_hotspot:
+                logger.info("RADIUS verify: no Hotspot RADIUS client for %s on router", server_ip_str)
+                return False
+            aaa_resource = api.get_resource("/ppp/aaa")
+            aaa_list = aaa_resource.get()
+            if not aaa_list or len(aaa_list) == 0:
+                logger.info("RADIUS verify: PPP AAA empty or missing on router")
+                return False
+            use_radius_yes = False
+            for item in aaa_list:
+                if not isinstance(item, dict):
+                    continue
+                use_radius = item.get("use-radius")
+                if use_radius and str(use_radius).lower() in ("yes", "true", "1"):
+                    use_radius_yes = True
+                    break
+            if not use_radius_yes:
+                logger.info("RADIUS verify: PPP AAA use-radius is not yes on router")
+                return False
+            logger.debug("RADIUS verify: PPP and Hotspot RADIUS config present, PPP AAA use-radius=yes")
+            return True
+        except Exception as e:
+            logger.warning("RADIUS verify failed: %s", e)
+            return False
 
 
 # Global instance

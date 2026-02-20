@@ -20,10 +20,10 @@ OpenVPN, this monitor (running every ~10 seconds) does:
 
    Then we:
    a) Insert/update row in RADIUS DB nas table (nasname=vpn_ip, shortname=router.name, secret=radius_secret).
-   b) Connect to MikroTik API and run: /radius add address=RADIUS_SERVER_IP service=ppp secret=... ; /ppp aaa set use-radius=yes accounting=yes.
+   b) Connect to MikroTik API and run: /radius add for service=ppp and service=hotspot (same server); /ppp aaa set use-radius=yes accounting=yes.
    c) Set router.radius_configured = True so we never do this again for this router.
 
-Result: MikroTik → FreeRADIUS → radius DB; no manual RADIUS config on the router.
+Result: MikroTik uses FreeRADIUS for both PPP and Hotspot auth/accounting; no manual RADIUS config on the router.
 """
 
 import logging
@@ -313,6 +313,48 @@ def _ensure_router_radius_setup(db: Session, router: Router, vpn_ip: str) -> Non
                 pass
 
 
+def _verify_router_radius_still_configured(db: Session, router: Router, vpn_ip: str) -> None:
+    """
+    When router.radius_configured is True, check on the device that RADIUS for PPP is still
+    present. If not (e.g. someone removed it), set router.radius_configured = False so the
+    next monitor run will re-apply RADIUS config.
+    """
+    radius_server_ip = (getattr(settings, "RADIUS_SERVER_IP", None) or "").strip()
+    if not radius_server_ip:
+        return
+    api_user = router.mikrotik_api_username or "admin"
+    api_pass = router.mikrotik_api_password
+    if not api_pass:
+        return
+    connection = None
+    try:
+        connection = mikrotik_service.connect(
+            host=vpn_ip,
+            username=api_user,
+            password=api_pass,
+            port=router.api_port,
+        )
+        if mikrotik_service.verify_radius_for_ppp(connection, radius_server_ip):
+            return
+        logger.warning(
+            "[RADIUS verify] Router %s (%s): RADIUS no longer present on device, setting radius_configured=False for re-apply",
+            router.id, router.name,
+        )
+        router.radius_configured = False
+        db.commit()
+        db.refresh(router)
+    except Exception as e:
+        logger.debug("[RADIUS verify] Router %s: verify failed (will retry next run): %s", router.id, e)
+    finally:
+        if connection:
+            try:
+                pool = connection.get("pool")
+                if pool:
+                    pool.disconnect()
+            except Exception:
+                pass
+
+
 def update_router_statuses():
     """
     Background task to update router statuses based on OpenVPN log and API tests.
@@ -411,7 +453,8 @@ def update_router_statuses():
                             elif not radius_secret:
                                 logger.info("[RADIUS auto-config] Router %s: skip (no radius_secret)", router.id)
                             elif radius_configured:
-                                logger.info("[RADIUS auto-config] Router %s: skip (already configured)", router.id)
+                                # Verify RADIUS still on device; if removed, set radius_configured=False to re-apply next run
+                                _verify_router_radius_still_configured(db, router, vpn_ip)
                     else:
                         mikrotik_api_accessible = False
                         final_status = RouterStatus.VPN_CONNECTED.value
